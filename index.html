@@ -1064,8 +1064,9 @@ async function openDetail(personId) {
       
       const cb = row.querySelector('input');
       cb.addEventListener('change', async () => {
-        await setChecked(p.id, t.id, cb.checked);
-        if (cb.checked) await setSkipped(p.id, t.id, false);
+        const wasChecked = cb.checked;
+        await setChecked(p.id, t.id, wasChecked);
+        if (wasChecked) await setSkipped(p.id, t.id, false);
         
         if (p.goals && p.goals.length > 0) {
           for (const goal of p.goals) {
@@ -1074,13 +1075,13 @@ async function openDetail(personId) {
           }
         }
         
-        openDetail(p.id);
+        // Don't call openDetail here - let Firebase listener handle it
       });
       
       row.querySelector('[data-action="missed"]').addEventListener('click', async () => {
         await setSkipped(p.id, t.id, !isSkipped(p.id, t.id));
         if (isSkipped(p.id, t.id)) await setChecked(p.id, t.id, false);
-        openDetail(p.id);
+        // Don't call openDetail here - let Firebase listener handle it
       });
       
       section.appendChild(row);
