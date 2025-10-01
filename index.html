@@ -1080,11 +1080,8 @@ async function openDetail(personId) {
         const wasChecked = cb.checked;
         cb.disabled = true; // Prevent rapid clicking
         
-        // Set flag to ignore Firebase updates for 2 seconds
+        // Set flag to ignore Firebase updates briefly to prevent double-render
         app.IGNORE_NEXT_STATE_UPDATE = true;
-        setTimeout(() => {
-          app.IGNORE_NEXT_STATE_UPDATE = false;
-        }, 2000);
         
         const currentTime = nowMinutes();
         await setChecked(p.id, t.id, wasChecked, t, currentTime);
@@ -1098,22 +1095,31 @@ async function openDetail(personId) {
         }
         
         cb.disabled = false;
-        // Refresh the view after state is saved
-        setTimeout(() => openDetail(p.id), 200);
+        
+        // Re-enable Firebase listener after save completes
+        setTimeout(() => {
+          app.IGNORE_NEXT_STATE_UPDATE = false;
+        }, 500);
+        
+        // Manually refresh after a short delay to ensure state is saved
+        setTimeout(() => openDetail(p.id), 300);
       });
       
       row.querySelector('[data-action="missed"]').addEventListener('click', async () => {
-        // Set flag to ignore Firebase updates for 2 seconds
+        // Set flag to ignore Firebase updates briefly
         app.IGNORE_NEXT_STATE_UPDATE = true;
-        setTimeout(() => {
-          app.IGNORE_NEXT_STATE_UPDATE = false;
-        }, 2000);
         
         const currentTime = nowMinutes();
         await setSkipped(p.id, t.id, !isSkipped(p.id, t.id));
         if (isSkipped(p.id, t.id)) await setChecked(p.id, t.id, false, t, currentTime);
+        
+        // Re-enable Firebase listener
+        setTimeout(() => {
+          app.IGNORE_NEXT_STATE_UPDATE = false;
+        }, 500);
+        
         // Refresh the view
-        setTimeout(() => openDetail(p.id), 200);
+        setTimeout(() => openDetail(p.id), 300);
       });
       
       section.appendChild(row);
@@ -2062,9 +2068,11 @@ const app = {
       
       app.state = newState;
       
-      // Only re-render if on summary page
+      // Re-render the appropriate view
       if (!app.dom.summaryEl.classList.contains('hidden')) {
         renderSummary();
+      } else if (!app.dom.detailEl.classList.contains('hidden') && app.CURRENT_PERSON && !app.IGNORE_NEXT_STATE_UPDATE) {
+        openDetail(app.CURRENT_PERSON);
       }
     }
   });
