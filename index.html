@@ -1005,13 +1005,35 @@ async function openDetail(personId) {
   document.getElementById('saveProgress').onclick = async () => {
     const saveBtn = document.getElementById('saveProgress');
     const originalText = saveBtn.textContent;
+    saveBtn.textContent = 'Saving...';
+    saveBtn.disabled = true;
+    
+    // Force a fresh read from Firebase to ensure we have latest state
+    try {
+      const snapshot = await get(ref(database, 'state'));
+      if (snapshot.exists()) {
+        const freshState = snapshot.val();
+        // Ensure all required properties exist
+        if (!freshState.checked) freshState.checked = {};
+        if (!freshState.skipped) freshState.skipped = {};
+        if (!freshState.overdueCompleted) freshState.overdueCompleted = {};
+        app.state = freshState;
+      }
+    } catch (error) {
+      console.error('Error refreshing state:', error);
+    }
+    
     saveBtn.textContent = 'Saved!';
     saveBtn.className = 'btn small saved';
+    saveBtn.disabled = false;
+    
+    // Re-render with fresh state
+    openDetail(p.id);
+    
     setTimeout(() => {
       saveBtn.textContent = originalText;
       saveBtn.className = 'btn small';
     }, 1000);
-    openDetail(p.id);
   };
   document.getElementById('clearPerson').onclick = async () => {
     await clearPerson(p.id);
@@ -2037,7 +2059,8 @@ const app = {
   
   // Set up real-time listeners for sync
   onValue(ref(database, 'state'), (snapshot) => {
-    if (snapshot.exists() && !syncInProgress) {
+    // Don't block listener updates - we want to see all changes
+    if (snapshot.exists()) {
       const newState = snapshot.val();
       console.log('Received state from Firebase:', JSON.stringify(newState, null, 2)); // Debug log
       
@@ -2048,11 +2071,13 @@ const app = {
       
       app.state = newState;
       
-      // Always re-render the current view when state changes
-      if (!app.dom.summaryEl.classList.contains('hidden')) {
-        renderSummary();
-      } else if (!app.dom.detailEl.classList.contains('hidden') && app.CURRENT_PERSON) {
-        openDetail(app.CURRENT_PERSON);
+      // Always re-render the current view when state changes (unless actively saving)
+      if (!syncInProgress) {
+        if (!app.dom.summaryEl.classList.contains('hidden')) {
+          renderSummary();
+        } else if (!app.dom.detailEl.classList.contains('hidden') && app.CURRENT_PERSON) {
+          openDetail(app.CURRENT_PERSON);
+        }
       }
     }
   });
