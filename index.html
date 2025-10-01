@@ -214,14 +214,17 @@ async function loadState() {
   try {
     const snapshot = await get(ref(database, 'state'));
     if (snapshot.exists()) {
-      return snapshot.val();
+      const state = snapshot.val();
+      // Ensure overdueCompleted exists
+      if (!state.overdueCompleted) state.overdueCompleted = {};
+      return state;
     }
-    const defaultState = {checked: {}, skipped: {}, lastResetStamp: null};
+    const defaultState = {checked: {}, skipped: {}, overdueCompleted: {}, lastResetStamp: null};
     await set(ref(database, 'state'), defaultState);
     return defaultState;
   } catch (error) {
     console.error('Error loading state:', error);
-    return {checked: {}, skipped: {}, lastResetStamp: null};
+    return {checked: {}, skipped: {}, overdueCompleted: {}, lastResetStamp: null};
   }
 }
 
@@ -403,6 +406,7 @@ async function ensureDailyReset() {
   if (app.state.lastResetStamp !== todayStamp) {
     app.state.checked = {};
     app.state.skipped = {};
+    app.state.overdueCompleted = {};
     app.state.lastResetStamp = todayStamp;
     await saveState(app.state);
   }
@@ -413,13 +417,34 @@ function isChecked(personId, taskId) {
   if (!app.state || !app.state.checked) return false;
   return !!app.state.checked[key(personId, taskId)]; 
 }
+function isOverdueCompleted(personId, taskId) {
+  if (!app.state || !app.state.overdueCompleted) return false;
+  return !!app.state.overdueCompleted[key(personId, taskId)];
+}
 async function setChecked(personId, taskId, v) {
-  if (!app.state) app.state = {checked: {}, skipped: {}, lastResetStamp: null};
+  if (!app.state) app.state = {checked: {}, skipped: {}, overdueCompleted: {}, lastResetStamp: null};
   if (!app.state.checked) app.state.checked = {};
   if (!app.state.skipped) app.state.skipped = {};
+  if (!app.state.overdueCompleted) app.state.overdueCompleted = {};
   
-  app.state.checked[key(personId, taskId)] = !!v;
-  if (v) delete app.state.skipped[key(personId, taskId)];
+  const k = key(personId, taskId);
+  
+  if (v) {
+    // If task was skipped (overdue), mark as overdue completed instead of regular completed
+    if (app.state.skipped[k]) {
+      app.state.overdueCompleted[k] = true;
+      delete app.state.checked[k];
+    } else {
+      app.state.checked[k] = true;
+      delete app.state.overdueCompleted[k];
+    }
+    delete app.state.skipped[k];
+  } else {
+    // Unchecking - remove from both
+    delete app.state.checked[k];
+    delete app.state.overdueCompleted[k];
+  }
+  
   await saveState(app.state);
 }
 function isSkipped(personId, taskId) { 
@@ -427,13 +452,15 @@ function isSkipped(personId, taskId) {
   return !!app.state.skipped[key(personId, taskId)]; 
 }
 async function setSkipped(personId, taskId, v) {
-  if (!app.state) app.state = {checked: {}, skipped: {}, lastResetStamp: null};
+  if (!app.state) app.state = {checked: {}, skipped: {}, overdueCompleted: {}, lastResetStamp: null};
   if (!app.state.checked) app.state.checked = {};
   if (!app.state.skipped) app.state.skipped = {};
+  if (!app.state.overdueCompleted) app.state.overdueCompleted = {};
   
   if (v) {
     app.state.skipped[key(personId, taskId)] = true;
     delete app.state.checked[key(personId, taskId)];
+    delete app.state.overdueCompleted[key(personId, taskId)];
   } else {
     delete app.state.skipped[key(personId, taskId)];
   }
@@ -441,15 +468,19 @@ async function setSkipped(personId, taskId, v) {
 }
 
 async function clearPerson(personId) {
-  if (!app.state) app.state = {checked: {}, skipped: {}, lastResetStamp: null};
+  if (!app.state) app.state = {checked: {}, skipped: {}, overdueCompleted: {}, lastResetStamp: null};
   if (!app.state.checked) app.state.checked = {};
   if (!app.state.skipped) app.state.skipped = {};
+  if (!app.state.overdueCompleted) app.state.overdueCompleted = {};
   
   Object.keys(app.state.checked).forEach(k => {
     if (k.startsWith(personId + '::')) delete app.state.checked[k];
   });
   Object.keys(app.state.skipped).forEach(k => {
     if (k.startsWith(personId + '::')) delete app.state.skipped[k];
+  });
+  Object.keys(app.state.overdueCompleted).forEach(k => {
+    if (k.startsWith(personId + '::')) delete app.state.overdueCompleted[k];
   });
   await saveState(app.state);
 }
@@ -780,6 +811,15 @@ function overdueCountForPerson(p, nowMins) {
   return c;
 }
 
+function overdueCompletedCountForPerson(p) {
+  if (!p.tasks || !Array.isArray(p.tasks)) return 0;
+  let c = 0;
+  for (const t of p.tasks) {
+    if (isOverdueCompleted(p.id, t.id)) c++;
+  }
+  return c;
+}
+
 function skippedCountForPerson(p) {
   if (!p.tasks || !Array.isArray(p.tasks)) return 0;
   let c = 0;
@@ -837,7 +877,7 @@ async function renderSummary() {
     const total = p.tasks.length;
     const done = p.tasks.filter(t => isChecked(p.id, t.id)).length;
     const pct = Math.round((done / total) * 100);
-    const overdue = overdueCountForPerson(p, nowM);
+    const overdueDone = overdueCompletedCountForPerson(p);
     const incomplete = skippedCountForPerson(p);
     const timing = deriveNowNext(p.tasks, nowM);
     const nowChecked = timing.now && timing.now.task && isChecked(p.id, timing.now.task.id);
@@ -863,8 +903,8 @@ async function renderSummary() {
         <div style="width:100%;text-align:center">
           <h2>${escapeHtml(p.name)}${activityDisplay}</h2>
           <div class="row" style="justify-content:center">
-            <span class="pill ${done === total ? 'success' : ''}">Completed: ${done}/${total}</span>
-            <span class="pill ${overdue > 0 ? 'danger' : ''}">Overdue: ${overdue}</span>
+            <span class="pill ${done === total && overdueDone === 0 ? 'success' : ''}">Completed: ${done}/${total}</span>
+            <span class="pill ${overdueDone > 0 ? 'danger' : ''}">Overdue: ${overdueDone}</span>
             <span class="pill ${incomplete > 0 ? 'danger' : ''}">Incomplete: ${incomplete}</span>
           </div>
         </div>
@@ -912,6 +952,7 @@ async function openDetail(personId) {
   const total = p.tasks.length;
   const done = p.tasks.filter(t => isChecked(p.id, t.id)).length;
   const pct = Math.round((done / total) * 100);
+  const overdueDone = overdueCompletedCountForPerson(p);
   
   let goalsHtml = '';
   if (p.goals && p.goals.length > 0) {
@@ -940,8 +981,8 @@ async function openDetail(personId) {
       <div class="row" style="justify-content:space-between;align-items:center">
         <div class="row" style="align-items:baseline;gap:12px">
           <h2 style="margin:0">${escapeHtml(p.name)}</h2>
-          <span class="pill ${done === total ? 'success' : ''}">Completed: ${done}/${total}</span>
-          <span class="pill ${overdueCountForPerson(p, nowM) > 0 ? 'danger' : ''}">Overdue: ${overdueCountForPerson(p, nowM)}</span>
+          <span class="pill ${done === total && overdueDone === 0 ? 'success' : ''}">Completed: ${done}/${total}</span>
+          <span class="pill ${overdueDone > 0 ? 'danger' : ''}">Overdue: ${overdueDone}</span>
           <span class="pill ${skippedCountForPerson(p) > 0 ? 'danger' : ''}">Incomplete: ${skippedCountForPerson(p)}</span>
         </div>
         <div class="row">
