@@ -764,6 +764,10 @@ async function renderSummary() {
   const nowM = nowMinutes();
   
   for (const person of app.PEOPLE) {
+    // Ensure tasks array exists
+    if (!person.tasks || !Array.isArray(person.tasks)) {
+      person.tasks = [];
+    }
     for (const task of person.tasks) {
       if (isTaskOverdue(person.id, task, nowM)) {
         await setSkipped(person.id, task.id, true);
@@ -772,6 +776,10 @@ async function renderSummary() {
   }
   
   app.PEOPLE.forEach(p => {
+    // Ensure tasks array exists
+    if (!p.tasks || !Array.isArray(p.tasks)) {
+      p.tasks = [];
+    }
     const total = p.tasks.length;
     const done = p.tasks.filter(t => isChecked(p.id, t.id)).length;
     const pct = Math.round((done / total) * 100);
@@ -1171,6 +1179,10 @@ function renderEditor() {
     `;
     
     const goalsEl = m.querySelector('.goals-list');
+    // Ensure goals array exists
+    if (!p.goals || !Array.isArray(p.goals)) {
+      p.goals = [];
+    }
     (p.goals || []).forEach(goal => {
       goalsEl.appendChild(createGoalRow(goal, p));
     });
@@ -1188,6 +1200,10 @@ function renderEditor() {
     };
     
     const activitiesEl = m.querySelector('.activities-list');
+    // Ensure activities array exists
+    if (!p.activities || !Array.isArray(p.activities)) {
+      p.activities = [];
+    }
     (p.activities || []).forEach(activity => {
       activitiesEl.appendChild(createActivityRow(activity));
     });
@@ -1204,6 +1220,10 @@ function renderEditor() {
     };
     
     const tasksEl = m.querySelector('.tasks');
+    // Ensure tasks array exists
+    if (!p.tasks || !Array.isArray(p.tasks)) {
+      p.tasks = [];
+    }
     p.tasks.forEach(t => tasksEl.appendChild(createTaskRow(t)));
     
     m.querySelector('[data-action="addTask"]').onclick = () => {
