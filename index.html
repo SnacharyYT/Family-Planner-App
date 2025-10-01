@@ -440,6 +440,11 @@ function getGoalProgress(personId, goal) {
   const person = app.PEOPLE.find(p => p.id === personId);
   if (!person) return {current: 0, target: goal.target};
   
+  // Ensure tasks array exists
+  if (!person.tasks || !Array.isArray(person.tasks)) {
+    person.tasks = [];
+  }
+  
   let tasksToCheck;
   if (goal.trackAll) {
     tasksToCheck = person.tasks;
@@ -465,6 +470,11 @@ function getGoalProgress(personId, goal) {
 async function recalculateGoalProgress(personId, goal) {
   const person = app.PEOPLE.find(p => p.id === personId);
   if (!person) return;
+  
+  // Ensure tasks array exists
+  if (!person.tasks || !Array.isArray(person.tasks)) {
+    person.tasks = [];
+  }
   
   let tasksToCheck;
   if (goal.trackAll) {
@@ -498,6 +508,11 @@ async function recalculateGoalProgress(personId, goal) {
 async function updateGoalProgress(personId, goal) {
   const person = app.PEOPLE.find(p => p.id === personId);
   if (!person) return;
+  
+  // Ensure tasks array exists
+  if (!person.tasks || !Array.isArray(person.tasks)) {
+    person.tasks = [];
+  }
   
   let tasksToCheck;
   if (goal.trackAll) {
@@ -724,6 +739,7 @@ function isTaskOverdue(personId, t, nowMins) {
 }
 
 function overdueCountForPerson(p, nowMins) {
+  if (!p.tasks || !Array.isArray(p.tasks)) return 0;
   let c = 0;
   for (const t of p.tasks) {
     if (isTaskOverdue(p.id, t, nowMins)) c++;
@@ -732,6 +748,7 @@ function overdueCountForPerson(p, nowMins) {
 }
 
 function skippedCountForPerson(p) {
+  if (!p.tasks || !Array.isArray(p.tasks)) return 0;
   let c = 0;
   for (const t of p.tasks) {
     if (isSkipped(p.id, t.id)) c++;
@@ -742,6 +759,10 @@ function skippedCountForPerson(p) {
 function overallCounts() {
   let total = 0, done = 0;
   app.PEOPLE.forEach(p => {
+    // Ensure tasks array exists
+    if (!p.tasks || !Array.isArray(p.tasks)) {
+      p.tasks = [];
+    }
     total += p.tasks.length;
     done += p.tasks.filter(t => isChecked(p.id, t.id)).length;
   });
@@ -838,6 +859,10 @@ async function openDetail(personId) {
   app.CURRENT_PERSON = personId;
   const p = app.PEOPLE.find(x => x.id === personId);
   if (!p) return;
+  
+  // Ensure required arrays exist
+  if (!p.tasks || !Array.isArray(p.tasks)) p.tasks = [];
+  if (!p.goals || !Array.isArray(p.goals)) p.goals = [];
   
   app.dom.summaryEl.classList.add('hidden');
   app.dom.editorEl.classList.add('hidden');
@@ -1513,7 +1538,7 @@ function timeString24(tm) {
 }
 
 function getCurrentActivity(person, nowM) {
-  if (!person.activities || person.activities.length === 0) return null;
+  if (!person.activities || !Array.isArray(person.activities) || person.activities.length === 0) return null;
   
   const now = new Date();
   const dayOfWeek = now.getDay();
@@ -1547,7 +1572,8 @@ function getCurrentActivity(person, nowM) {
 async function cleanupDeletedGoals() {
   const currentGoalKeys = new Set();
   app.PEOPLE.forEach(person => {
-    if (person.goals) {
+    // Ensure goals array exists
+    if (person.goals && Array.isArray(person.goals)) {
       person.goals.forEach(goal => {
         currentGoalKeys.add(person.id + '_' + goal.id);
       });
