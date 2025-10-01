@@ -987,6 +987,7 @@ async function openDetail(personId) {
         </div>
         <div class="row">
           <button class="btn small ghost" id="backBtn">Back</button>
+          <button class="btn small" id="saveProgress">Save</button>
           <button class="btn small" id="clearPerson">Clear</button>
         </div>
       </div>
@@ -1000,6 +1001,17 @@ async function openDetail(personId) {
   `;
   
   document.getElementById('backBtn').onclick = renderSummary;
+  document.getElementById('saveProgress').onclick = async () => {
+    const saveBtn = document.getElementById('saveProgress');
+    const originalText = saveBtn.textContent;
+    saveBtn.textContent = 'Saved!';
+    saveBtn.className = 'btn small saved';
+    setTimeout(() => {
+      saveBtn.textContent = originalText;
+      saveBtn.className = 'btn small';
+    }, 1000);
+    openDetail(p.id);
+  };
   document.getElementById('clearPerson').onclick = async () => {
     await clearPerson(p.id);
     openDetail(p.id);
