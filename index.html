@@ -476,11 +476,11 @@ function getGoalProgress(personId, goal) {
   
   if (goal.type === 'streak') {
     const goalKey = personId + '_' + goal.id;
-    const current = app.goalState.streaks[goalKey] || 0;
+    const current = (app.goalState && app.goalState.streaks) ? (app.goalState.streaks[goalKey] || 0) : 0;
     return {current, target: goal.target};
   } else {
     const goalKey = personId + '_' + goal.id;
-    const current = app.goalState.totals[goalKey] || 0;
+    const current = (app.goalState && app.goalState.totals) ? (app.goalState.totals[goalKey] || 0) : 0;
     return {current, target: goal.target};
   }
 }
@@ -549,6 +549,15 @@ async function updateGoalProgress(personId, goal) {
   const today = getDateStamp();
   const yesterday = getDateStamp(new Date(Date.now() - 86400000));
   
+  // Safety check for goalState
+  if (!app.goalState) {
+    app.goalState = {streaks: {}, totals: {}, lastCompletionDate: {}, achievements: {}};
+  }
+  if (!app.goalState.streaks) app.goalState.streaks = {};
+  if (!app.goalState.totals) app.goalState.totals = {};
+  if (!app.goalState.lastCompletionDate) app.goalState.lastCompletionDate = {};
+  if (!app.goalState.achievements) app.goalState.achievements = {};
+  
   if (goal.type === 'streak' && pct >= 100) {
     if (app.goalState.lastCompletionDate[goalKey] === today) return;
     
@@ -575,6 +584,12 @@ async function updateGoalProgress(personId, goal) {
 function checkGoalAchievement(personId, goal) {
   const progress = getGoalProgress(personId, goal);
   const goalKey = personId + '_' + goal.id;
+  
+  // Safety check for goalState
+  if (!app.goalState) {
+    app.goalState = {streaks: {}, totals: {}, lastCompletionDate: {}, achievements: {}};
+  }
+  if (!app.goalState.achievements) app.goalState.achievements = {};
   
   if (progress.current >= progress.target && !app.goalState.achievements[goalKey]) {
     app.goalState.achievements[goalKey] = getDateStamp();
@@ -903,7 +918,8 @@ async function openDetail(personId) {
     p.goals.forEach(goal => {
       const progress = getGoalProgress(p.id, goal);
       const goalPct = Math.round((progress.current / progress.target) * 100);
-      const achieved = app.goalState.achievements[p.id + '_' + goal.id];
+      // Safety check for achievements
+      const achieved = app.goalState && app.goalState.achievements ? app.goalState.achievements[p.id + '_' + goal.id] : null;
       goalsHtml += `
         <div class="goal-section">
           <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:4px">
