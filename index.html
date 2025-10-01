@@ -421,7 +421,7 @@ function isOverdueCompleted(personId, taskId) {
   if (!app.state || !app.state.overdueCompleted) return false;
   return !!app.state.overdueCompleted[key(personId, taskId)];
 }
-async function setChecked(personId, taskId, v) {
+async function setChecked(personId, taskId, v, task, nowMins) {
   if (!app.state) app.state = {checked: {}, skipped: {}, overdueCompleted: {}, lastResetStamp: null};
   if (!app.state.checked) app.state.checked = {};
   if (!app.state.skipped) app.state.skipped = {};
@@ -430,11 +430,16 @@ async function setChecked(personId, taskId, v) {
   const k = key(personId, taskId);
   
   if (v) {
-    // If task was skipped (overdue), mark as overdue completed instead of regular completed
-    if (app.state.skipped[k]) {
+    // Check if task is being checked late
+    const tm = getTaskTime(task);
+    const isLate = tm && nowMins >= minutesOf(tm) + 30;
+    
+    if (isLate) {
+      // Mark as overdue completed
       app.state.overdueCompleted[k] = true;
       delete app.state.checked[k];
     } else {
+      // Mark as completed on time
       app.state.checked[k] = true;
       delete app.state.overdueCompleted[k];
     }
@@ -811,6 +816,15 @@ function overdueCountForPerson(p, nowMins) {
   return c;
 }
 
+function incompleteCountForPerson(p) {
+  if (!p.tasks || !Array.isArray(p.tasks)) return 0;
+  let c = 0;
+  for (const t of p.tasks) {
+    if (!isChecked(p.id, t.id) && !isOverdueCompleted(p.id, t.id)) c++;
+  }
+  return c;
+}
+
 function overdueCompletedCountForPerson(p) {
   if (!p.tasks || !Array.isArray(p.tasks)) return 0;
   let c = 0;
@@ -857,17 +871,7 @@ async function renderSummary() {
   
   const nowM = nowMinutes();
   
-  for (const person of app.PEOPLE) {
-    // Ensure tasks array exists
-    if (!person.tasks || !Array.isArray(person.tasks)) {
-      person.tasks = [];
-    }
-    for (const task of person.tasks) {
-      if (isTaskOverdue(person.id, task, nowM)) {
-        await setSkipped(person.id, task.id, true);
-      }
-    }
-  }
+  // Remove auto-skip logic - just render current state
   
   app.PEOPLE.forEach(p => {
     // Ensure tasks array exists
@@ -878,7 +882,7 @@ async function renderSummary() {
     const done = p.tasks.filter(t => isChecked(p.id, t.id)).length;
     const pct = Math.round((done / total) * 100);
     const overdueDone = overdueCompletedCountForPerson(p);
-    const incomplete = skippedCountForPerson(p);
+    const incomplete = incompleteCountForPerson(p);
     const timing = deriveNowNext(p.tasks, nowM);
     const nowChecked = timing.now && timing.now.task && isChecked(p.id, timing.now.task.id);
     const nowSkipped = timing.now && timing.now.task && isSkipped(p.id, timing.now.task.id);
@@ -943,11 +947,7 @@ async function openDetail(personId) {
   
   const nowM = nowMinutes();
   
-  for (const task of p.tasks) {
-    if (isTaskOverdue(p.id, task, nowM)) {
-      await setSkipped(p.id, task.id, true);
-    }
-  }
+  // Remove auto-skip logic - just render current state
   
   const total = p.tasks.length;
   const done = p.tasks.filter(t => isChecked(p.id, t.id)).length;
@@ -983,7 +983,7 @@ async function openDetail(personId) {
           <h2 style="margin:0">${escapeHtml(p.name)}</h2>
           <span class="pill ${done === total && overdueDone === 0 ? 'success' : ''}">Completed: ${done}/${total}</span>
           <span class="pill ${overdueDone > 0 ? 'danger' : ''}">Overdue: ${overdueDone}</span>
-          <span class="pill ${skippedCountForPerson(p) > 0 ? 'danger' : ''}">Incomplete: ${skippedCountForPerson(p)}</span>
+          <span class="pill ${incompleteCountForPerson(p) > 0 ? 'danger' : ''}">Incomplete: ${incompleteCountForPerson(p)}</span>
         </div>
         <div class="row">
           <button class="btn small ghost" id="backBtn">Back</button>
@@ -1077,7 +1077,7 @@ async function openDetail(personId) {
       const cb = row.querySelector('input');
       cb.addEventListener('change', async () => {
         const wasChecked = cb.checked;
-        await setChecked(p.id, t.id, wasChecked);
+        await setChecked(p.id, t.id, wasChecked, t, nowM);
         if (wasChecked) await setSkipped(p.id, t.id, false);
         
         if (p.goals && p.goals.length > 0) {
@@ -1087,13 +1087,15 @@ async function openDetail(personId) {
           }
         }
         
-        // Don't call openDetail here - let Firebase listener handle it
+        // Refresh the view
+        openDetail(p.id);
       });
       
       row.querySelector('[data-action="missed"]').addEventListener('click', async () => {
         await setSkipped(p.id, t.id, !isSkipped(p.id, t.id));
-        if (isSkipped(p.id, t.id)) await setChecked(p.id, t.id, false);
-        // Don't call openDetail here - let Firebase listener handle it
+        if (isSkipped(p.id, t.id)) await setChecked(p.id, t.id, false, t, nowM);
+        // Refresh the view
+        openDetail(p.id);
       });
       
       section.appendChild(row);
