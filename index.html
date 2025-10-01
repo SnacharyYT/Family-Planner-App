@@ -409,14 +409,28 @@ async function ensureDailyReset() {
 }
 
 function key(personId, taskId) { return personId + '::' + taskId; }
-function isChecked(personId, taskId) { return !!app.state.checked[key(personId, taskId)]; }
+function isChecked(personId, taskId) { 
+  if (!app.state || !app.state.checked) return false;
+  return !!app.state.checked[key(personId, taskId)]; 
+}
 async function setChecked(personId, taskId, v) {
+  if (!app.state) app.state = {checked: {}, skipped: {}, lastResetStamp: null};
+  if (!app.state.checked) app.state.checked = {};
+  if (!app.state.skipped) app.state.skipped = {};
+  
   app.state.checked[key(personId, taskId)] = !!v;
   if (v) delete app.state.skipped[key(personId, taskId)];
   await saveState(app.state);
 }
-function isSkipped(personId, taskId) { return !!app.state.skipped[key(personId, taskId)]; }
+function isSkipped(personId, taskId) { 
+  if (!app.state || !app.state.skipped) return false;
+  return !!app.state.skipped[key(personId, taskId)]; 
+}
 async function setSkipped(personId, taskId, v) {
+  if (!app.state) app.state = {checked: {}, skipped: {}, lastResetStamp: null};
+  if (!app.state.checked) app.state.checked = {};
+  if (!app.state.skipped) app.state.skipped = {};
+  
   if (v) {
     app.state.skipped[key(personId, taskId)] = true;
     delete app.state.checked[key(personId, taskId)];
@@ -427,6 +441,10 @@ async function setSkipped(personId, taskId, v) {
 }
 
 async function clearPerson(personId) {
+  if (!app.state) app.state = {checked: {}, skipped: {}, lastResetStamp: null};
+  if (!app.state.checked) app.state.checked = {};
+  if (!app.state.skipped) app.state.skipped = {};
+  
   Object.keys(app.state.checked).forEach(k => {
     if (k.startsWith(personId + '::')) delete app.state.checked[k];
   });
