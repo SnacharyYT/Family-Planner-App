@@ -1077,7 +1077,10 @@ async function openDetail(personId) {
       const cb = row.querySelector('input');
       cb.addEventListener('change', async () => {
         const wasChecked = cb.checked;
-        const currentTime = nowMinutes(); // Get fresh time when checkbox is clicked
+        // Keep the checkbox in its current state visually
+        cb.disabled = true; // Prevent rapid clicking
+        
+        const currentTime = nowMinutes();
         await setChecked(p.id, t.id, wasChecked, t, currentTime);
         if (wasChecked) await setSkipped(p.id, t.id, false);
         
@@ -1088,16 +1091,17 @@ async function openDetail(personId) {
           }
         }
         
-        // Refresh the view
-        openDetail(p.id);
+        cb.disabled = false;
+        // Refresh the view after a tiny delay to ensure state is persisted
+        setTimeout(() => openDetail(p.id), 100);
       });
       
       row.querySelector('[data-action="missed"]').addEventListener('click', async () => {
-        const currentTime = nowMinutes(); // Get fresh time
+        const currentTime = nowMinutes();
         await setSkipped(p.id, t.id, !isSkipped(p.id, t.id));
         if (isSkipped(p.id, t.id)) await setChecked(p.id, t.id, false, t, currentTime);
         // Refresh the view
-        openDetail(p.id);
+        setTimeout(() => openDetail(p.id), 100);
       });
       
       section.appendChild(row);
@@ -2035,11 +2039,14 @@ const app = {
   // Set up real-time listeners for sync
   onValue(ref(database, 'state'), (snapshot) => {
     if (snapshot.exists() && !syncInProgress) {
-      app.state = snapshot.val();
-      if (!app.dom.summaryEl.classList.contains('hidden')) {
+      const newState = snapshot.val();
+      // Only update if we're not currently on a detail page or if state actually changed
+      if (app.dom.summaryEl.classList.contains('hidden') === false) {
+        app.state = newState;
         renderSummary();
-      } else if (!app.dom.detailEl.classList.contains('hidden') && app.CURRENT_PERSON) {
-        openDetail(app.CURRENT_PERSON);
+      } else {
+        // Just update the state without re-rendering detail view
+        app.state = newState;
       }
     }
   });
