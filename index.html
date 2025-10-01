@@ -1077,7 +1077,8 @@ async function openDetail(personId) {
       const cb = row.querySelector('input');
       cb.addEventListener('change', async () => {
         const wasChecked = cb.checked;
-        await setChecked(p.id, t.id, wasChecked, t, nowM);
+        const currentTime = nowMinutes(); // Get fresh time when checkbox is clicked
+        await setChecked(p.id, t.id, wasChecked, t, currentTime);
         if (wasChecked) await setSkipped(p.id, t.id, false);
         
         if (p.goals && p.goals.length > 0) {
@@ -1092,8 +1093,9 @@ async function openDetail(personId) {
       });
       
       row.querySelector('[data-action="missed"]').addEventListener('click', async () => {
+        const currentTime = nowMinutes(); // Get fresh time
         await setSkipped(p.id, t.id, !isSkipped(p.id, t.id));
-        if (isSkipped(p.id, t.id)) await setChecked(p.id, t.id, false, t, nowM);
+        if (isSkipped(p.id, t.id)) await setChecked(p.id, t.id, false, t, currentTime);
         // Refresh the view
         openDetail(p.id);
       });
