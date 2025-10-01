@@ -450,6 +450,7 @@ async function setChecked(personId, taskId, v, task, nowMins) {
     delete app.state.overdueCompleted[k];
   }
   
+  console.log('Saving state:', JSON.stringify(app.state, null, 2)); // Debug log
   await saveState(app.state);
 }
 function isSkipped(personId, taskId) { 
@@ -2050,13 +2051,9 @@ const app = {
   
   // Set up real-time listeners for sync
   onValue(ref(database, 'state'), (snapshot) => {
-    // Ignore updates if we just made a local change
-    if (app.IGNORE_NEXT_STATE_UPDATE) {
-      return;
-    }
-    
     if (snapshot.exists() && !syncInProgress) {
       const newState = snapshot.val();
+      console.log('Received state from Firebase:', JSON.stringify(newState, null, 2)); // Debug log
       app.state = newState;
       
       // Only re-render if on summary page
