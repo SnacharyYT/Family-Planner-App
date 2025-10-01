@@ -414,12 +414,24 @@ async function ensureDailyReset() {
 
 function key(personId, taskId) { return personId + '::' + taskId; }
 function isChecked(personId, taskId) { 
-  if (!app.state || !app.state.checked) return false;
-  return !!app.state.checked[key(personId, taskId)]; 
+  if (!app.state || !app.state.checked) {
+    console.log(`isChecked(${personId}, ${taskId}): app.state or checked is missing`);
+    return false;
+  }
+  const k = key(personId, taskId);
+  const result = !!app.state.checked[k];
+  console.log(`isChecked(${k}): ${result}`);
+  return result;
 }
 function isOverdueCompleted(personId, taskId) {
-  if (!app.state || !app.state.overdueCompleted) return false;
-  return !!app.state.overdueCompleted[key(personId, taskId)];
+  if (!app.state || !app.state.overdueCompleted) {
+    console.log(`isOverdueCompleted(${personId}, ${taskId}): app.state or overdueCompleted is missing`);
+    return false;
+  }
+  const k = key(personId, taskId);
+  const result = !!app.state.overdueCompleted[k];
+  console.log(`isOverdueCompleted(${k}): ${result}`);
+  return result;
 }
 async function setChecked(personId, taskId, v, task, nowMins) {
   if (!app.state) app.state = {checked: {}, skipped: {}, overdueCompleted: {}, lastResetStamp: null};
@@ -1008,16 +1020,23 @@ async function openDetail(personId) {
     saveBtn.textContent = 'Saving...';
     saveBtn.disabled = true;
     
+    console.log('=== SAVE BUTTON CLICKED ===');
+    console.log('Current app.state before refresh:', JSON.stringify(app.state, null, 2));
+    
     // Force a fresh read from Firebase to ensure we have latest state
     try {
       const snapshot = await get(ref(database, 'state'));
       if (snapshot.exists()) {
         const freshState = snapshot.val();
+        console.log('Fresh state from Firebase:', JSON.stringify(freshState, null, 2));
+        
         // Ensure all required properties exist
         if (!freshState.checked) freshState.checked = {};
         if (!freshState.skipped) freshState.skipped = {};
         if (!freshState.overdueCompleted) freshState.overdueCompleted = {};
+        
         app.state = freshState;
+        console.log('app.state after setting fresh state:', JSON.stringify(app.state, null, 2));
       }
     } catch (error) {
       console.error('Error refreshing state:', error);
@@ -1027,6 +1046,7 @@ async function openDetail(personId) {
     saveBtn.className = 'btn small saved';
     saveBtn.disabled = false;
     
+    console.log('About to call openDetail with person:', p.id);
     // Re-render with fresh state
     openDetail(p.id);
     
