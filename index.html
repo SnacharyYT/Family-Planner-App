@@ -1077,8 +1077,13 @@ async function openDetail(personId) {
       const cb = row.querySelector('input');
       cb.addEventListener('change', async () => {
         const wasChecked = cb.checked;
-        // Keep the checkbox in its current state visually
         cb.disabled = true; // Prevent rapid clicking
+        
+        // Set flag to ignore Firebase updates for 2 seconds
+        app.IGNORE_NEXT_STATE_UPDATE = true;
+        setTimeout(() => {
+          app.IGNORE_NEXT_STATE_UPDATE = false;
+        }, 2000);
         
         const currentTime = nowMinutes();
         await setChecked(p.id, t.id, wasChecked, t, currentTime);
@@ -1092,16 +1097,22 @@ async function openDetail(personId) {
         }
         
         cb.disabled = false;
-        // Refresh the view after a tiny delay to ensure state is persisted
-        setTimeout(() => openDetail(p.id), 100);
+        // Refresh the view after state is saved
+        setTimeout(() => openDetail(p.id), 200);
       });
       
       row.querySelector('[data-action="missed"]').addEventListener('click', async () => {
+        // Set flag to ignore Firebase updates for 2 seconds
+        app.IGNORE_NEXT_STATE_UPDATE = true;
+        setTimeout(() => {
+          app.IGNORE_NEXT_STATE_UPDATE = false;
+        }, 2000);
+        
         const currentTime = nowMinutes();
         await setSkipped(p.id, t.id, !isSkipped(p.id, t.id));
         if (isSkipped(p.id, t.id)) await setChecked(p.id, t.id, false, t, currentTime);
         // Refresh the view
-        setTimeout(() => openDetail(p.id), 100);
+        setTimeout(() => openDetail(p.id), 200);
       });
       
       section.appendChild(row);
@@ -2012,6 +2023,7 @@ const app = {
   CURRENT_PERSON: null,
   LAST_MIN: -1,
   AUTH_UNTIL: 0,
+  IGNORE_NEXT_STATE_UPDATE: false, // Flag to prevent Firebase sync conflicts
   dom: {
     summaryEl: document.getElementById('summary'),
     detailEl: document.getElementById('detail'),
@@ -2038,15 +2050,18 @@ const app = {
   
   // Set up real-time listeners for sync
   onValue(ref(database, 'state'), (snapshot) => {
+    // Ignore updates if we just made a local change
+    if (app.IGNORE_NEXT_STATE_UPDATE) {
+      return;
+    }
+    
     if (snapshot.exists() && !syncInProgress) {
       const newState = snapshot.val();
-      // Only update if we're not currently on a detail page or if state actually changed
-      if (app.dom.summaryEl.classList.contains('hidden') === false) {
-        app.state = newState;
+      app.state = newState;
+      
+      // Only re-render if on summary page
+      if (!app.dom.summaryEl.classList.contains('hidden')) {
         renderSummary();
-      } else {
-        // Just update the state without re-rendering detail view
-        app.state = newState;
       }
     }
   });
