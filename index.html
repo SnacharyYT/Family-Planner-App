@@ -144,7 +144,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.4.0';
+const APP_VERSION = 'V0.4.1';
 
 const COLOR_THEMES = {
   blue: {name: 'Ocean Blue', primary: '#1e3a8a', secondary: '#60a5fa', bg: 'linear-gradient(180deg, #0c1e44, #0f172a)', card: 'rgba(30, 58, 138, 0.15)'},
@@ -710,6 +710,143 @@ function confirmDialog(message) {
   });
 }
 
+function openPetCustomizer(person) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-backdrop';
+    
+    const currentPetName = person.petName || 'Pet';
+    const currentPetEmoji = person.petEmoji || '😄';
+    
+    const petOptions = ['😄', '😊', '🐶', '🐱', '🐼', '🐰', '🦊', '🐻', '🐨', '🦁', '🐯', '🐸', '🐵', '🦄', '🐲', '🦖'];
+    
+    overlay.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-body">
+          <h3 style="margin:0 0 16px 0">Customize ${escapeHtml(person.name)}'s Pet</h3>
+          
+          <div class="field" style="margin-bottom:16px">
+            <label>Pet Name</label>
+            <input id="petNameInput" type="text" value="${escapeHtml(currentPetName)}" placeholder="Enter pet name" style="width:100%;margin-top:8px"/>
+          </div>
+          
+          <div class="field">
+            <label>Choose Pet</label>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px">
+              ${petOptions.map(emoji => `
+                <button class="pet-option ${emoji === currentPetEmoji ? 'selected' : ''}" data-emoji="${emoji}" 
+                  style="font-size:32px;padding:12px;border:2px solid ${emoji === currentPetEmoji ? 'var(--accent)' : 'var(--outline)'};
+                  border-radius:12px;background:var(--card);cursor:pointer;transition:all 0.2s">
+                  ${emoji}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+        <div class="row" style="justify-content:flex-end">
+          <button class="btn small ghost" id="petCancel">Cancel</button>
+          <button class="btn small" id="petSave">Save</button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(overlay);
+    
+    let selectedEmoji = currentPetEmoji;
+    
+    overlay.querySelectorAll('.pet-option').forEach(btn => {
+      btn.onclick = () => {
+        overlay.querySelectorAll('.pet-option').forEach(b => {
+          b.style.borderColor = 'var(--outline)';
+          b.classList.remove('selected');
+        });
+        btn.style.borderColor = 'var(--accent)';
+        btn.classList.add('selected');
+        selectedEmoji = btn.dataset.emoji;
+      };
+    });
+    
+    const cleanup = () => {
+      overlay.remove();
+      resolve();
+    };
+    
+    overlay.querySelector('#petSave').onclick = async () => {
+      const petName = overlay.querySelector('#petNameInput').value.trim() || 'Pet';
+      
+      // Update person's pet data
+      person.petName = petName;
+      person.petEmoji = selectedEmoji;
+      
+      // Save to config
+      app.CONFIG.people = app.PEOPLE;
+      await saveConfig(app.CONFIG);
+      
+      cleanup();
+      openDetail(person.id);
+    };
+    
+    overlay.querySelector('#petCancel').onclick = cleanup;
+    overlay.onclick = e => {
+      if (e.target === overlay) cleanup();
+    };
+  });
+}
+
+async function renderIndividualAnalytics(person) {
+  const container = document.getElementById('individualAnalytics');
+  if (!container) return;
+  
+  // Get last 7 days of data
+  const history = await getHistoricalData(7);
+  
+  const personHistory = history.map(day => {
+    const personData = day.people[person.id];
+    if (!personData) return {date: day.date, pct: 0, total: 0, done: 0};
+    const pct = personData.total > 0 ? Math.round((personData.done / personData.total) * 100) : 0;
+    return {date: day.date, pct, total: personData.total, done: personData.done};
+  });
+  
+  const avg = Math.round(personHistory.reduce((a, b) => a + b.pct, 0) / personHistory.length);
+  const bestDay = Math.max(...personHistory.map(d => d.pct));
+  const perfectDays = personHistory.filter(d => d.pct === 100).length;
+  
+  // Create bar chart
+  const bars = personHistory.map((day, i) => {
+    const height = Math.max(day.pct, 5);
+    const color = day.pct >= 71 ? '#22c55e' : day.pct >= 41 ? '#f59e0b' : '#94a3b8';
+    const date = new Date(day.date);
+    const dayName = date.toLocaleDateString('en-US', {weekday: 'short'});
+    
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+      <div style="height:100px;display:flex;align-items:flex-end">
+        <div style="width:100%;height:${height}%;background:${color};border-radius:4px 4px 0 0" 
+          title="${dayName}: ${day.pct}% (${day.done}/${day.total})"></div>
+      </div>
+      <div class="muted" style="font-size:10px">${dayName}</div>
+      <div style="font-size:11px;font-weight:600">${day.pct}%</div>
+    </div>`;
+  }).join('');
+  
+  container.innerHTML = `
+    <div style="display:flex;gap:2px;margin-bottom:16px">${bars}</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;text-align:center">
+      <div>
+        <div style="font-size:24px;font-weight:700;color:var(--accent)">${avg}%</div>
+        <div class="muted" style="font-size:12px">Avg This Week</div>
+      </div>
+      <div>
+        <div style="font-size:24px;font-weight:700;color:#22c55e">${bestDay}%</div>
+        <div class="muted" style="font-size:12px">Best Day</div>
+      </div>
+      <div>
+        <div style="font-size:24px;font-weight:700;color:#fbbf24">${perfectDays}</div>
+        <div class="muted" style="font-size:12px">Perfect Days</div>
+      </div>
+    </div>
+  `;
+}
+
 function pinDialog() {
   return new Promise(resolve => {
     const overlay = document.createElement('div');
@@ -1236,6 +1373,7 @@ async function renderSummary() {
   app.CURRENT_PERSON = null;
   app.dom.editorEl.classList.add('hidden');
   app.dom.detailEl.classList.add('hidden');
+  app.dom.dashboardEl.classList.add('hidden');
   app.dom.summaryEl.classList.remove('hidden');
   app.dom.summaryEl.innerHTML = '';
   
@@ -1324,6 +1462,7 @@ async function openDetail(personId) {
   
   app.dom.summaryEl.classList.add('hidden');
   app.dom.editorEl.classList.add('hidden');
+  app.dom.dashboardEl.classList.add('hidden');
   app.dom.detailEl.classList.remove('hidden');
   
   const nowM = nowMinutes();
@@ -1334,6 +1473,10 @@ async function openDetail(personId) {
   const done = p.tasks.filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
   const pct = Math.round((done / total) * 100);
   const overdueDone = overdueCompletedCountForPerson(p);
+  
+  const pet = getPetState(pct);
+  const petName = p.petName || 'Pet';
+  const petEmoji = p.petEmoji || pet.emoji;
   
   let goalsHtml = '';
   if (p.goals && p.goals.length > 0) {
@@ -1359,29 +1502,45 @@ async function openDetail(personId) {
   
   app.dom.detailEl.innerHTML = `
     <div class="card" style="margin-bottom:14px">
-      <div class="row" style="justify-content:space-between;align-items:center">
-        <div class="row" style="align-items:baseline;gap:12px">
-          <h2 style="margin:0">${escapeHtml(p.name)}</h2>
-          <span class="pill ${done === total && overdueDone === 0 ? 'success' : ''}">Completed: ${done}/${total}</span>
-          <span class="pill ${overdueDone > 0 ? 'danger' : ''}">Overdue: ${overdueDone}</span>
-          <span class="pill ${incompleteCountForPerson(p) > 0 ? 'danger' : ''}">Incomplete: ${incompleteCountForPerson(p)}</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:16px">
+          <div style="text-align:center">
+            <div style="font-size:64px;line-height:1">${petEmoji}</div>
+            <div class="muted" style="font-size:11px;color:${pet.color}">${escapeHtml(petName)}</div>
+            <div class="muted" style="font-size:10px">${pet.state}</div>
+          </div>
+          <div>
+            <h2 style="margin:0">${escapeHtml(p.name)}</h2>
+            <div class="row" style="margin-top:8px">
+              <span class="pill ${done === total && overdueDone === 0 ? 'success' : ''}">Completed: ${done}/${total}</span>
+              <span class="pill ${overdueDone > 0 ? 'danger' : ''}">Overdue: ${overdueDone}</span>
+              <span class="pill ${incompleteCountForPerson(p) > 0 ? 'danger' : ''}">Incomplete: ${incompleteCountForPerson(p)}</span>
+            </div>
+          </div>
         </div>
         <div class="row">
           <button class="btn small ghost" id="backBtn">Back</button>
+          <button class="btn small ghost" id="customizePet">🎨 Pet</button>
           <button class="btn small" id="saveProgress">Save</button>
           <button class="btn small" id="clearPerson">Clear</button>
         </div>
       </div>
-      <div class="spacer"></div>
       <div class="progress">
         <div class="bar" style="width:${pct}%"></div>
       </div>
     </div>
     ${goalsHtml}
     <div id="tasks"></div>
+    
+    <!-- Individual Analytics -->
+    <div class="card" style="margin-top:16px">
+      <h3 style="margin:0 0 12px 0">${escapeHtml(p.name)}'s Weekly Progress</h3>
+      <div id="individualAnalytics"></div>
+    </div>
   `;
   
   document.getElementById('backBtn').onclick = renderSummary;
+  document.getElementById('customizePet').onclick = () => openPetCustomizer(p);
   document.getElementById('saveProgress').onclick = async () => {
     const saveBtn = document.getElementById('saveProgress');
     const originalText = saveBtn.textContent;
@@ -1427,6 +1586,9 @@ async function openDetail(personId) {
     await clearPerson(p.id);
     openDetail(p.id);
   };
+  
+  // Render individual analytics
+  renderIndividualAnalytics(p);
   
   const tasksWrap = document.getElementById('tasks');
   const groups = groupByWhen(p.tasks);
@@ -1513,6 +1675,7 @@ async function openDetail(personId) {
 function renderEditor() {
   app.dom.summaryEl.classList.add('hidden');
   app.dom.detailEl.classList.add('hidden');
+  app.dom.dashboardEl.classList.add('hidden');
   app.dom.editorEl.classList.remove('hidden');
   
   // Safety check
