@@ -521,7 +521,7 @@ function getGoalProgress(personId, goal) {
     tasksToCheck = person.tasks.filter(t => goal.taskIds && goal.taskIds.includes(t.id));
   }
   
-  const completed = tasksToCheck.filter(t => isChecked(personId, t.id)).length;
+  const completed = tasksToCheck.filter(t => isChecked(personId, t.id) || isOverdueCompleted(personId, t.id)).length;
   
   if (goal.type === 'streak') {
     const goalKey = personId + '_' + goal.id;
@@ -552,7 +552,7 @@ async function recalculateGoalProgress(personId, goal) {
     tasksToCheck = person.tasks.filter(t => goal.taskIds && goal.taskIds.includes(t.id));
   }
   
-  const completed = tasksToCheck.filter(t => isChecked(personId, t.id)).length;
+  const completed = tasksToCheck.filter(t => isChecked(personId, t.id) || isOverdueCompleted(personId, t.id)).length;
   const total = tasksToCheck.length;
   const pct = total > 0 ? (completed / total) * 100 : 0;
   
@@ -590,7 +590,7 @@ async function updateGoalProgress(personId, goal) {
     tasksToCheck = person.tasks.filter(t => goal.taskIds && goal.taskIds.includes(t.id));
   }
   
-  const completed = tasksToCheck.filter(t => isChecked(personId, t.id)).length;
+  const completed = tasksToCheck.filter(t => isChecked(personId, t.id) || isOverdueCompleted(personId, t.id)).length;
   const total = tasksToCheck.length;
   const pct = total > 0 ? (completed / total) * 100 : 0;
   
@@ -864,7 +864,7 @@ function overallCounts() {
       p.tasks = [];
     }
     total += p.tasks.length;
-    done += p.tasks.filter(t => isChecked(p.id, t.id)).length;
+    done += p.tasks.filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
   });
   const pct = total ? (done / total * 100) : 0;
   return {done, total, pct};
@@ -892,7 +892,7 @@ async function renderSummary() {
       p.tasks = [];
     }
     const total = p.tasks.length;
-    const done = p.tasks.filter(t => isChecked(p.id, t.id)).length;
+    const done = p.tasks.filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
     const pct = Math.round((done / total) * 100);
     const overdueDone = overdueCompletedCountForPerson(p);
     const incomplete = incompleteCountForPerson(p);
@@ -963,7 +963,7 @@ async function openDetail(personId) {
   // Remove auto-skip logic - just render current state
   
   const total = p.tasks.length;
-  const done = p.tasks.filter(t => isChecked(p.id, t.id)).length;
+  const done = p.tasks.filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
   const pct = Math.round((done / total) * 100);
   const overdueDone = overdueCompletedCountForPerson(p);
   
@@ -1068,7 +1068,7 @@ async function openDetail(personId) {
     
     const section = document.createElement('div');
     section.className = 'card';
-    const doneW = groups[when].filter(t => isChecked(p.id, t.id)).length;
+    const doneW = groups[when].filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
     section.innerHTML = `
       <div class="row" style="justify-content:space-between">
         <h3 style="margin:0;text-transform:capitalize">${when}</h3>
@@ -1081,7 +1081,7 @@ async function openDetail(personId) {
       row.className = 'task';
       const tt = getTaskTime(t);
       const timeStr = tt ? (timeString12(tt) + ' – ') : '';
-      const chk = isChecked(p.id, t.id);
+      const chk = isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id);
       const sk = isSkipped(p.id, t.id);
       
       const trackedGoals = (p.goals || []).filter(goal => {
