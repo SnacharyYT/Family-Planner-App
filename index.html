@@ -142,6 +142,8 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
+const APP_VERSION = 'V0.3.2';
+
 const COLOR_THEMES = {
   blue: {name: 'Ocean Blue', primary: '#1e3a8a', secondary: '#60a5fa', bg: 'linear-gradient(180deg, #0c1e44, #0f172a)', card: 'rgba(30, 58, 138, 0.15)'},
   purple: {name: 'Purple Dream', primary: '#581c87', secondary: '#a855f7', bg: 'linear-gradient(180deg, #1e0a2e, #0f172a)', card: 'rgba(88, 28, 135, 0.15)'},
@@ -796,20 +798,33 @@ function deriveNowNext(tasks, nowMins) {
   for (let i = 0; i < timed.length; i++) {
     const cur = timed[i], nxt = timed[i + 1];
     const curStart = minutesOf(cur.time);
+    const curEnd = curStart + 30; // Task window is task time + 30 minutes
     const nextStart = nxt ? minutesOf(nxt.time) : Infinity;
     
     if (nowMins < curStart) {
+      // Before the first task
       return {now: null, next: {task: cur.t, label: cur.t.label, time: cur.time}};
     }
-    if (nowMins >= curStart && nowMins < nextStart) {
+    if (nowMins >= curStart && nowMins < curEnd && nowMins < nextStart) {
+      // Within current task window and before next task
       return {
         now: {task: cur.t, label: cur.t.label, time: cur.time},
         next: nxt ? {task: nxt.t, label: nxt.t.label, time: nxt.time} : null
       };
     }
+    if (nowMins >= curEnd && (nowMins < nextStart || !nxt)) {
+      // After current task window
+      if (nxt && nowMins < nextStart) {
+        // Free time between tasks
+        return {now: null, next: {task: nxt.t, label: nxt.t.label, time: nxt.time}};
+      } else if (!nxt) {
+        // After all tasks
+        return {now: null, next: null};
+      }
+    }
   }
-  const last = timed[timed.length - 1];
-  return {now: {task: last.t, label: last.t.label, time: last.time}, next: null};
+  
+  return {now: null, next: null};
 }
 
 function isTaskOverdue(personId, t, nowMins) {
@@ -831,9 +846,16 @@ function overdueCountForPerson(p, nowMins) {
 
 function incompleteCountForPerson(p) {
   if (!p.tasks || !Array.isArray(p.tasks)) return 0;
+  const nowM = nowMinutes();
   let c = 0;
   for (const t of p.tasks) {
-    if (!isChecked(p.id, t.id) && !isOverdueCompleted(p.id, t.id)) c++;
+    // Only count as incomplete if task is overdue (30+ mins past due time) and not completed/skipped
+    if (!isChecked(p.id, t.id) && !isOverdueCompleted(p.id, t.id) && !isSkipped(p.id, t.id)) {
+      const tm = getTaskTime(t);
+      if (tm && nowM >= minutesOf(tm) + 30) {
+        c++;
+      }
+    }
   }
   return c;
 }
@@ -1103,11 +1125,6 @@ async function openDetail(personId) {
             <div class="when">${when}</div>
           </div>
         </label>
-        <div class="row" style="margin-left:auto">
-          <button class="btn small ghost" data-action="missed">
-            ${sk ? 'Missed' : 'Mark missed'}
-          </button>
-        </div>
       `;
       
       if (trackedGoals.length > 0) {
@@ -1137,13 +1154,6 @@ async function openDetail(personId) {
         cb.disabled = false;
       });
       
-      row.querySelector('[data-action="missed"]').addEventListener('click', async () => {
-        const currentTime = nowMinutes();
-        await setSkipped(p.id, t.id, !isSkipped(p.id, t.id));
-        if (isSkipped(p.id, t.id)) await setChecked(p.id, t.id, false, t, currentTime);
-        // Don't re-render manually - let Firebase listener handle it
-      });
-      
       section.appendChild(row);
     });
     
@@ -1169,7 +1179,10 @@ function renderEditor() {
   app.dom.editorEl.innerHTML = `
     <div class="form-card">
       <div class="row" style="justify-content:space-between;align-items:center">
-        <h2 style="margin:0">App Settings</h2>
+        <div>
+          <h2 style="margin:0">App Settings</h2>
+          <div class="muted" style="font-size:11px;margin-top:4px">${APP_VERSION}</div>
+        </div>
         <div class="row">
           <button class="btn small ghost" id="cancelEdit">Cancel</button>
           <button class="btn small" id="saveEdit">Save</button>
@@ -2029,7 +2042,20 @@ function updateClockAndCountdown() {
     const diff = Math.max(0, bedtime - now);
     const hrs = Math.floor(diff / 3600000);
     const mins = Math.floor((diff % 3600000) / 60000);
-    app.dom.bedtimeEl.textContent = pad2(hrs) + ':' + pad2(mins) + ' until bedtime';
+    
+    let timeText = '';
+    if (hrs > 0) {
+      timeText = hrs + (hrs === 1 ? ' hour' : ' hours');
+      if (mins > 0) {
+        timeText += ' and ' + mins + (mins === 1 ? ' minute' : ' minutes');
+      }
+    } else if (mins > 0) {
+      timeText = mins + (mins === 1 ? ' minute' : ' minutes');
+    } else {
+      timeText = 'less than a minute';
+    }
+    
+    app.dom.bedtimeEl.textContent = timeText + ' until bedtime';
   } else {
     app.dom.bedtimeEl.textContent = '';
   }
