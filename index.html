@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.4.3
-Last Updated: October 2, 2025 at 4:15 PM
+Version: V0.4.4
+Last Updated: October 2, 2025 at 4:30 PM
 -->
 <html lang="en">
 <head>
@@ -104,12 +104,22 @@ input[type=text],input[type=time],input[type=number],select,input[type=password]
 input[type=text],input[type=time],input[type=number],select,input[type=password]{padding:14px 16px;font-size:16px}
 label{font-size:14px}
 .form-row{grid-template-columns:1fr}
-.task-row{grid-template-columns:1fr auto}
-.goal-row{grid-template-columns:1fr auto}
+.task-row{grid-template-columns:1fr;gap:12px}
+.task-row input, .task-row button{width:100%;margin-bottom:8px}
+.goal-row{grid-template-columns:1fr;gap:12px}
+.goal-row input, .goal-row select, .goal-row button{width:100%;margin-bottom:8px}
 .color-themes{grid-template-columns:repeat(2,1fr)}
 .muted{font-size:14px}
 .card{padding:20px}
 .mood-indicator{font-size:24px;top:-8px;right:-8px}
+.member-card{padding:16px}
+.settings-section{padding:12px}
+.row{gap:12px}
+h2{font-size:20px}
+h3{font-size:16px}
+.toggle-switch{width:100%;max-width:300px}
+.field{margin-bottom:12px}
+.form-card{padding:16px}
 }
 </style>
 </head>
@@ -163,7 +173,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.4.3';
+const APP_VERSION = 'V0.4.4';
 
 const COLOR_THEMES = {
   blue: {name: 'Ocean Blue', primary: '#1e3a8a', secondary: '#60a5fa', bg: 'linear-gradient(180deg, #0c1e44, #0f172a)', card: 'rgba(30, 58, 138, 0.15)'},
@@ -421,17 +431,17 @@ function getPetState(completionPct, person, nowMins) {
     const bedMins = minutesOf(person.bedTime);
     const minsUntilBed = bedMins - nowMins;
     if (minsUntilBed >= 0 && minsUntilBed <= 30) {
-      return {emoji: '😄', state: 'bedtime soon', color: '#8b5cf6', indicator: '💤'};
+      return {emoji: '😄', state: 'is getting tired', color: '#8b5cf6', indicator: '💤'};
     }
   }
   
   // Use completion percentage for other states
   if (completionPct >= 71) {
-    return {emoji: '😄', state: 'energetic', color: '#22c55e', indicator: '✨'};
+    return {emoji: '😄', state: 'is feeling amazing', color: '#22c55e', indicator: '✨'};
   } else if (completionPct >= 41) {
-    return {emoji: '🙂', state: 'happy', color: '#f59e0b', indicator: '❤️'};
+    return {emoji: '🙂', state: 'is happy', color: '#f59e0b', indicator: '❤️'};
   } else {
-    return {emoji: '😴', state: 'resting', color: '#94a3b8', indicator: ''};
+    return {emoji: '😴', state: 'isn\'t feeling good', color: '#94a3b8', indicator: '😢'};
   }
 }
 
@@ -2601,23 +2611,55 @@ function updateClockAndCountdown() {
   if (earliestBedtime) {
     const bedtime = new Date(now);
     bedtime.setHours(earliestBedtime.h, earliestBedtime.m, 0, 0);
-    const diff = Math.max(0, bedtime - now);
-    const hrs = Math.floor(diff / 3600000);
-    const mins = Math.floor((diff % 3600000) / 60000);
+    const diff = bedtime - now;
     
-    let timeText = '';
-    if (hrs > 0) {
-      timeText = hrs + (hrs === 1 ? ' hour' : ' hours');
-      if (mins > 0) {
-        timeText += ' and ' + mins + (mins === 1 ? ' minute' : ' minutes');
+    if (diff > 0) {
+      // Before bedtime - show countdown to bed
+      const hrs = Math.floor(diff / 3600000);
+      const mins = Math.floor((diff % 3600000) / 60000);
+      
+      let timeText = '';
+      if (hrs > 0) {
+        timeText = hrs + (hrs === 1 ? ' hour' : ' hours');
+        if (mins > 0) {
+          timeText += ' and ' + mins + (mins === 1 ? ' minute' : ' minutes');
+        }
+      } else if (mins > 0) {
+        timeText = mins + (mins === 1 ? ' minute' : ' minutes');
+      } else {
+        timeText = 'less than a minute';
       }
-    } else if (mins > 0) {
-      timeText = mins + (mins === 1 ? ' minute' : ' minutes');
+      
+      app.dom.bedtimeEl.textContent = timeText + ' until bedtime';
     } else {
-      timeText = 'less than a minute';
+      // Past bedtime - show countdown to morning
+      const wakeTime = app.CONFIG.wakeParent || {h: 6, m: 0};
+      const morning = new Date(now);
+      morning.setHours(wakeTime.h, wakeTime.m, 0, 0);
+      
+      // If wake time already passed today, set to tomorrow
+      if (morning <= now) {
+        morning.setDate(morning.getDate() + 1);
+      }
+      
+      const diffToMorning = morning - now;
+      const hrsToMorning = Math.floor(diffToMorning / 3600000);
+      const minsToMorning = Math.floor((diffToMorning % 3600000) / 60000);
+      
+      let morningText = '';
+      if (hrsToMorning > 0) {
+        morningText = hrsToMorning + (hrsToMorning === 1 ? ' hour' : ' hours');
+        if (minsToMorning > 0) {
+          morningText += ' and ' + minsToMorning + (minsToMorning === 1 ? ' minute' : ' minutes');
+        }
+      } else if (minsToMorning > 0) {
+        morningText = minsToMorning + (minsToMorning === 1 ? ' minute' : ' minutes');
+      } else {
+        morningText = 'less than a minute';
+      }
+      
+      app.dom.bedtimeEl.textContent = 'Sleeping. Morning in ' + morningText;
     }
-    
-    app.dom.bedtimeEl.textContent = timeText + ' until bedtime';
   } else {
     app.dom.bedtimeEl.textContent = '';
   }
