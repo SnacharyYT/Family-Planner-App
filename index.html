@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.4.8
-Last Updated: October 2, 2025 at 5:00 PM
+Version: V0.4.9
+Last Updated: October 2, 2025 at 5:10 PM
 -->
 <html lang="en">
 <head>
@@ -39,7 +39,8 @@ header{padding:12px 16px;background:var(--card);backdrop-filter:blur(6px);positi
 .detail{max-width:720px;margin:0 auto}
 .task{display:flex;gap:12px;align-items:flex-start;padding:12px;border-radius:12px;border:1px solid rgba(148,163,184,.15);margin-bottom:10px;background:rgba(2,6,23,.6);transition:all .2s ease}
 .task.overdue{border-color:#f87171;background:rgba(248,113,113,.08)}
-.task.missed{border-color:#f59e0b;background:rgba(245,158,11,.08)}
+.task.skipped{opacity:0.6}
+.task.skipped .label{text-decoration:line-through}
 .task input[type=checkbox]{width:22px;height:22px;cursor:pointer}
 .task .label{font-size:15px;line-height:1.3}.when{font-size:11px;color:var(--muted)}
 .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -175,7 +176,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.4.8';
+const APP_VERSION = 'V0.4.9';
 
 const COLOR_THEMES = {
   blue: {name: 'Ocean Blue', primary: '#1e3a8a', secondary: '#60a5fa', bg: 'linear-gradient(180deg, #0c1e44, #0f172a)', card: 'rgba(30, 58, 138, 0.15)'},
@@ -420,11 +421,12 @@ function stampFor(date) {
 }
 
 function getPetState(completionPct, person, nowMins) {
-  // Check for incomplete tasks first (highest priority)
+  // Check for incomplete tasks first (highest priority) - excluding skipped
   if (person && person.tasks) {
     const hasIncomplete = person.tasks.some(t => {
+      if (isSkipped(person.id, t.id)) return false; // Exclude skipped tasks
       const tm = getTaskTime(t);
-      return tm && nowMins >= minutesOf(tm) + 30 && !isChecked(person.id, t.id) && !isOverdueCompleted(person.id, t.id) && !isSkipped(person.id, t.id);
+      return tm && nowMins >= minutesOf(tm) + 30 && !isChecked(person.id, t.id) && !isOverdueCompleted(person.id, t.id);
     });
     if (hasIncomplete) {
       return {emoji: '😄', state: 'needs attention', color: '#ef4444', indicator: '💢'};
@@ -440,7 +442,7 @@ function getPetState(completionPct, person, nowMins) {
     }
   }
   
-  // Use completion percentage for other states
+  // Use completion percentage for other states (excluding skipped tasks from calculation)
   if (completionPct >= 71) {
     return {emoji: '😄', state: 'is feeling amazing', color: '#22c55e', indicator: '✨'};
   } else if (completionPct >= 41) {
@@ -1765,9 +1767,11 @@ async function renderSummary() {
     if (!p.tasks || !Array.isArray(p.tasks)) {
       p.tasks = [];
     }
-    const total = p.tasks.length;
-    const done = p.tasks.filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
-    const pct = Math.round((done / total) * 100);
+    // Calculate completion excluding skipped tasks
+    const nonSkippedTasks = p.tasks.filter(t => !isSkipped(p.id, t.id));
+    const total = nonSkippedTasks.length;
+    const done = nonSkippedTasks.filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
+    const pct = total > 0 ? Math.round((done / total) * 100) : 100;
     const overdueDone = overdueCompletedCountForPerson(p);
     const incomplete = incompleteCountForPerson(p);
     const timing = deriveNowNext(p.tasks, nowM);
@@ -1848,9 +1852,11 @@ async function openDetail(personId) {
   
   // Remove auto-skip logic - just render current state
   
-  const total = p.tasks.length;
-  const done = p.tasks.filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
-  const pct = Math.round((done / total) * 100);
+  // Calculate completion excluding skipped tasks
+  const nonSkippedTasks = p.tasks.filter(t => !isSkipped(p.id, t.id));
+  const total = nonSkippedTasks.length;
+  const done = nonSkippedTasks.filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 100;
   const overdueDone = overdueCompletedCountForPerson(p);
   
   const pet = getPetState(pct, p, nowM);
@@ -2021,7 +2027,7 @@ async function openDetail(personId) {
         row.style.borderLeft = '3px solid #fbbf24';
       }
       
-      if (sk) row.classList.add('missed');
+      if (sk) row.classList.add('skipped');
       else if (isTaskOverdue(p.id, t, nowM)) row.classList.add('overdue');
       
       const cb = row.querySelector('input');
