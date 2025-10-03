@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.4.6
-Last Updated: October 2, 2025 at 4:45 PM
+Version: V0.4.7
+Last Updated: October 2, 2025 at 4:50 PM
 -->
 <html lang="en">
 <head>
@@ -175,7 +175,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.4.6';
+const APP_VERSION = 'V0.4.7';
 
 const COLOR_THEMES = {
   blue: {name: 'Ocean Blue', primary: '#1e3a8a', secondary: '#60a5fa', bg: 'linear-gradient(180deg, #0c1e44, #0f172a)', card: 'rgba(30, 58, 138, 0.15)'},
@@ -420,10 +420,13 @@ function stampFor(date) {
 }
 
 function getPetState(completionPct, person, nowMins) {
-  // Check for overdue tasks first (highest priority)
+  // Check for incomplete tasks first (highest priority)
   if (person && person.tasks) {
-    const hasOverdue = person.tasks.some(t => isTaskOverdue(person.id, t, nowMins));
-    if (hasOverdue) {
+    const hasIncomplete = person.tasks.some(t => {
+      const tm = getTaskTime(t);
+      return tm && nowMins >= minutesOf(tm) + 30 && !isChecked(person.id, t.id) && !isOverdueCompleted(person.id, t.id) && !isSkipped(person.id, t.id);
+    });
+    if (hasIncomplete) {
       return {emoji: '😄', state: 'needs attention', color: '#ef4444', indicator: '💢'};
     }
   }
@@ -1222,7 +1225,7 @@ function renderPersonCompletionAnalysis(person) {
   const incompletePct = total > 0 ? Math.round((incomplete / total) * 100) : 0;
   
   return `
-    <div style="border:1px solid var(--outline);border-radius:12px;padding:16px">
+    <div class="card clickable" style="border:1px solid var(--outline);border-radius:12px;padding:16px" onclick="showTaskDetails('${person.id}')">
       <div style="font-weight:600;margin-bottom:16px">${escapeHtml(person.name)}</div>
       
       <div style="margin-bottom:12px">
@@ -1254,8 +1257,73 @@ function renderPersonCompletionAnalysis(person) {
           <div style="height:100%;width:${incompletePct}%;background:#ef4444"></div>
         </div>
       </div>
+      
+      <div class="muted" style="font-size:11px;margin-top:12px;text-align:center">Click for task details</div>
     </div>
   `;
+}
+
+function showTaskDetails(personId) {
+  const person = app.PEOPLE.find(p => p.id === personId);
+  if (!person) return;
+  
+  const nowM = nowMinutes();
+  const taskStats = (person.tasks || []).map(task => {
+    const onTime = isChecked(person.id, task.id);
+    const overdue = isOverdueCompleted(person.id, task.id);
+    const incomplete = !onTime && !overdue && !isSkipped(person.id, task.id) && 
+      (() => {
+        const tm = getTaskTime(task);
+        return tm && nowM >= minutesOf(tm) + 30;
+      })();
+    
+    let status = '✅ On Time';
+    let color = '#22c55e';
+    if (incomplete) {
+      status = '❌ Incomplete';
+      color = '#ef4444';
+    } else if (overdue) {
+      status = '⚠️ Completed Late';
+      color = '#f59e0b';
+    } else if (!onTime && !overdue && !incomplete) {
+      status = '⏳ Pending';
+      color = '#94a3b8';
+    }
+    
+    return {task, status, color};
+  });
+  
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-backdrop';
+  overlay.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true" style="max-width:600px">
+      <h3 style="margin:0 0 16px 0">${escapeHtml(person.name)}'s Task Details</h3>
+      <div style="max-height:400px;overflow-y:auto;margin-bottom:16px">
+        ${taskStats.map(({task, status, color}) => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;border:1px solid var(--outline);border-radius:8px;margin-bottom:8px">
+            <div style="flex:1">
+              <div style="font-weight:600;margin-bottom:4px">${escapeHtml(stripLeadingTime(task.label))}</div>
+              ${task.time ? `<div class="muted" style="font-size:12px">${timeString12(task.time)}</div>` : ''}
+            </div>
+            <div style="font-size:13px;font-weight:600;color:${color};white-space:nowrap;margin-left:12px">
+              ${status}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <div style="text-align:right">
+        <button class="btn small" id="closeTaskDetails">Close</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(overlay);
+  
+  const closeBtn = overlay.querySelector('#closeTaskDetails');
+  closeBtn.onclick = () => overlay.remove();
+  overlay.onclick = e => {
+    if (e.target === overlay) overlay.remove();
+  };
 }
 
 function renderPersonTrendCard(person, weekHistory) {
