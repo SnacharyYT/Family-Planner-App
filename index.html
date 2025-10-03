@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.4.5
-Last Updated: October 2, 2025 at 4:35 PM
+Version: V0.4.6
+Last Updated: October 2, 2025 at 4:45 PM
 -->
 <html lang="en">
 <head>
@@ -89,8 +89,10 @@ input[type=text],input[type=time],input[type=number],select,input[type=password]
 .sync-status.syncing{background:rgba(251,191,36,.15);color:#fbbf24;border-color:rgba(251,191,36,.3)}
 .sync-status.error{background:rgba(239,68,68,.15);color:#ef4444;border-color:rgba(239,68,68,.3)}
 .pet-container{position:relative;display:inline-block}
-.mood-indicator{position:absolute;top:-5px;right:-5px;font-size:20px;line-height:1;animation:bounce 0.5s ease-in-out}
+.mood-indicator{position:absolute;top:-5px;right:-5px;font-size:20px;line-height:1;animation:bounce 0.5s ease-in-out infinite;animation-iteration-count:1}
 @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+.pet-container{animation:petBounce 30s ease-in-out infinite}
+@keyframes petBounce{0%,98%,100%{transform:translateY(0)}99%{transform:translateY(-8px)}}
 @media (pointer:coarse){
 .btn{padding:16px 20px;font-size:18px}
 .btn.small{padding:12px 16px;font-size:16px}
@@ -173,7 +175,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.4.5';
+const APP_VERSION = 'V0.4.6';
 
 const COLOR_THEMES = {
   blue: {name: 'Ocean Blue', primary: '#1e3a8a', secondary: '#60a5fa', bg: 'linear-gradient(180deg, #0c1e44, #0f172a)', card: 'rgba(30, 58, 138, 0.15)'},
@@ -1182,6 +1184,14 @@ async function renderDashboard() {
       </div>
     </div>
     
+    <!-- Task Completion Analysis -->
+    <div class="card" style="margin-bottom:16px">
+      <h2 style="margin:0 0 16px 0">Task Completion Analysis (This Week)</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px">
+        ${app.PEOPLE.map(p => renderPersonCompletionAnalysis(p)).join('')}
+      </div>
+    </div>
+    
     <!-- Achievements -->
     <div class="card">
       <h2 style="margin:0 0 16px 0">Recent Achievements</h2>
@@ -1198,6 +1208,54 @@ async function renderDashboard() {
   document.getElementById('backFromDashboard').onclick = renderSummary;
   
   applyColorTheme(app.CONFIG.colorTheme || 'blue');
+}
+
+function renderPersonCompletionAnalysis(person) {
+  // Get this week's task completion data
+  const onTime = (person.tasks || []).filter(t => isChecked(person.id, t.id)).length;
+  const overdue = (person.tasks || []).filter(t => isOverdueCompleted(person.id, t.id)).length;
+  const incomplete = incompleteCountForPerson(person);
+  const total = (person.tasks || []).length;
+  
+  const onTimePct = total > 0 ? Math.round((onTime / total) * 100) : 0;
+  const overduePct = total > 0 ? Math.round((overdue / total) * 100) : 0;
+  const incompletePct = total > 0 ? Math.round((incomplete / total) * 100) : 0;
+  
+  return `
+    <div style="border:1px solid var(--outline);border-radius:12px;padding:16px">
+      <div style="font-weight:600;margin-bottom:16px">${escapeHtml(person.name)}</div>
+      
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:13px">✅ On Time</span>
+          <span style="font-weight:600;color:#22c55e">${onTime} (${onTimePct}%)</span>
+        </div>
+        <div style="height:8px;background:rgba(34,197,94,.2);border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${onTimePct}%;background:#22c55e"></div>
+        </div>
+      </div>
+      
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:13px">⚠️ Overdue</span>
+          <span style="font-weight:600;color:#f59e0b">${overdue} (${overduePct}%)</span>
+        </div>
+        <div style="height:8px;background:rgba(245,158,11,.2);border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${overduePct}%;background:#f59e0b"></div>
+        </div>
+      </div>
+      
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:13px">❌ Incomplete</span>
+          <span style="font-weight:600;color:#ef4444">${incomplete} (${incompletePct}%)</span>
+        </div>
+        <div style="height:8px;background:rgba(239,68,68,.2);border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${incompletePct}%;background:#ef4444"></div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function renderPersonTrendCard(person, weekHistory) {
@@ -1481,7 +1539,7 @@ async function renderSummary() {
             </div>
             <h2 style="margin:0">${escapeHtml(p.name)}${activityDisplay}</h2>
           </div>
-          <div class="muted" style="font-size:11px;margin-bottom:8px;color:${pet.color}">${escapeHtml(petName)} is ${pet.state}</div>
+          <div class="muted" style="font-size:11px;margin-bottom:8px;color:${pet.color}">${escapeHtml(petName)} ${pet.state}</div>
           <div class="row" style="justify-content:center">
             <span class="pill ${done === total && overdueDone === 0 ? 'success' : ''}">Completed: ${done}/${total}</span>
             <span class="pill ${overdueDone > 0 ? 'danger' : ''}">Overdue: ${overdueDone}</span>
