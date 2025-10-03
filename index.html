@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.4.7
-Last Updated: October 2, 2025 at 4:50 PM
+Version: V0.4.8
+Last Updated: October 2, 2025 at 5:00 PM
 -->
 <html lang="en">
 <head>
@@ -175,7 +175,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.4.7';
+const APP_VERSION = 'V0.4.8';
 
 const COLOR_THEMES = {
   blue: {name: 'Ocean Blue', primary: '#1e3a8a', secondary: '#60a5fa', bg: 'linear-gradient(180deg, #0c1e44, #0f172a)', card: 'rgba(30, 58, 138, 0.15)'},
@@ -1195,6 +1195,13 @@ async function renderDashboard() {
       </div>
     </div>
     
+    <!-- Forgiveness Tool -->
+    <div class="card" style="margin-bottom:16px">
+      <h2 style="margin:0 0 8px 0">Forgive Tasks</h2>
+      <p class="muted" style="font-size:13px;margin:0 0 16px 0">Clear overdue or incomplete tasks when there are special circumstances</p>
+      <button class="btn" id="openForgivenessBtn" style="width:100%">Open Forgiveness Tool</button>
+    </div>
+    
     <!-- Achievements -->
     <div class="card">
       <h2 style="margin:0 0 16px 0">Recent Achievements</h2>
@@ -1209,6 +1216,16 @@ async function renderDashboard() {
   renderAchievements();
   
   document.getElementById('backFromDashboard').onclick = renderSummary;
+  
+  document.getElementById('openForgivenessBtn').onclick = async () => {
+    // Check PIN protection
+    if (app.CONFIG.pinEnabled && Date.now() >= app.AUTH_UNTIL) {
+      const unlocked = await pinDialog();
+      if (!unlocked) return;
+      app.AUTH_UNTIL = Date.now() + (5 * 60 * 1000);
+    }
+    openForgivenessDialog();
+  };
   
   applyColorTheme(app.CONFIG.colorTheme || 'blue');
 }
@@ -1262,6 +1279,185 @@ function renderPersonCompletionAnalysis(person) {
     </div>
   `;
 }
+
+function openForgivenessDialog() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-backdrop';
+  
+  const peopleButtons = app.PEOPLE.map(p => {
+    const nowM = nowMinutes();
+    const overdueCount = (p.tasks || []).filter(t => isOverdueCompleted(p.id, t.id)).length;
+    const incompleteCount = incompleteCountForPerson(p);
+    const totalIssues = overdueCount + incompleteCount;
+    
+    return `
+      <button class="btn" style="width:100%;margin-bottom:8px;text-align:left;display:flex;justify-content:space-between;align-items:center" 
+        onclick="showForgiveOptions('${p.id}')">
+        <span>${escapeHtml(p.name)}</span>
+        <span class="pill ${totalIssues > 0 ? 'danger' : 'success'}">${totalIssues} issues</span>
+      </button>
+    `;
+  }).join('');
+  
+  overlay.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true" style="max-width:500px">
+      <h3 style="margin:0 0 16px 0">Forgive Tasks</h3>
+      <p class="muted" style="font-size:13px;margin-bottom:16px">Select a family member to forgive their overdue or incomplete tasks</p>
+      <div id="forgivenessContent">
+        ${peopleButtons}
+      </div>
+      <div style="text-align:right;margin-top:16px">
+        <button class="btn small ghost" id="closeForgiveness">Close</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(overlay);
+  
+  overlay.querySelector('#closeForgiveness').onclick = () => overlay.remove();
+  overlay.onclick = e => {
+    if (e.target === overlay) overlay.remove();
+  };
+  
+  // Store reference for later use
+  window.currentForgivenessOverlay = overlay;
+}
+
+window.showForgiveOptions = function(personId) {
+  const person = app.PEOPLE.find(p => p.id === personId);
+  if (!person) return;
+  
+  const nowM = nowMinutes();
+  const overdueTasks = (person.tasks || []).filter(t => isOverdueCompleted(person.id, t.id));
+  const incompleteTasks = (person.tasks || []).filter(t => {
+    const tm = getTaskTime(t);
+    return tm && nowM >= minutesOf(tm) + 30 && !isChecked(person.id, t.id) && !isOverdueCompleted(person.id, t.id) && !isSkipped(person.id, t.id);
+  });
+  
+  const allProblems = [...overdueTasks, ...incompleteTasks];
+  
+  if (allProblems.length === 0) {
+    const content = window.currentForgivenessOverlay.querySelector('#forgivenessContent');
+    content.innerHTML = `
+      <div style="text-align:center;padding:20px">
+        <div style="font-size:48px;margin-bottom:12px">✨</div>
+        <div style="font-weight:600;margin-bottom:8px">${escapeHtml(person.name)} has no issues!</div>
+        <div class="muted" style="font-size:13px">All tasks are on track</div>
+        <button class="btn small" style="margin-top:16px" onclick="location.reload()">Back</button>
+      </div>
+    `;
+    return;
+  }
+  
+  const groupedByPeriod = {
+    morning: allProblems.filter(t => t.when === 'morning'),
+    afternoon: allProblems.filter(t => t.when === 'afternoon'),
+    evening: allProblems.filter(t => t.when === 'evening')
+  };
+  
+  const content = window.currentForgivenessOverlay.querySelector('#forgivenessContent');
+  content.innerHTML = `
+    <div style="margin-bottom:16px">
+      <button class="btn small ghost" onclick="openForgivenessDialog()">← Back to family</button>
+    </div>
+    
+    <h4 style="margin:0 0 12px 0">${escapeHtml(person.name)}'s Issues</h4>
+    
+    <div style="margin-bottom:16px">
+      <button class="btn" style="width:100%" onclick="forgiveAll('${person.id}')">
+        Forgive All (${allProblems.length} tasks)
+      </button>
+    </div>
+    
+    <div style="border-top:1px solid var(--outline);padding-top:16px;margin-top:16px">
+      <h5 style="margin:0 0 12px 0">Forgive by Period</h5>
+      ${groupedByPeriod.morning.length > 0 ? `
+        <button class="btn ghost" style="width:100%;margin-bottom:8px" onclick="forgivePeriod('${person.id}', 'morning')">
+          Morning (${groupedByPeriod.morning.length} tasks)
+        </button>
+      ` : ''}
+      ${groupedByPeriod.afternoon.length > 0 ? `
+        <button class="btn ghost" style="width:100%;margin-bottom:8px" onclick="forgivePeriod('${person.id}', 'afternoon')">
+          Afternoon (${groupedByPeriod.afternoon.length} tasks)
+        </button>
+      ` : ''}
+      ${groupedByPeriod.evening.length > 0 ? `
+        <button class="btn ghost" style="width:100%;margin-bottom:8px" onclick="forgivePeriod('${person.id}', 'evening')">
+          Evening (${groupedByPeriod.evening.length} tasks)
+        </button>
+      ` : ''}
+    </div>
+    
+    <div style="border-top:1px solid var(--outline);padding-top:16px;margin-top:16px">
+      <h5 style="margin:0 0 12px 0">Forgive Individual Tasks</h5>
+      ${allProblems.map(task => {
+        const isOverdue = isOverdueCompleted(person.id, task.id);
+        const badge = isOverdue ? '⚠️ Overdue' : '❌ Incomplete';
+        return `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid var(--outline);border-radius:8px;margin-bottom:8px">
+            <div style="flex:1">
+              <div style="font-size:14px">${escapeHtml(stripLeadingTime(task.label))}</div>
+              <div class="muted" style="font-size:11px">${badge}</div>
+            </div>
+            <button class="btn small" onclick="forgiveTask('${person.id}', '${task.id}')">Forgive</button>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+};
+
+window.forgiveAll = async function(personId) {
+  if (!await confirmDialog('Forgive all overdue and incomplete tasks? This will clear their penalties.')) return;
+  
+  const person = app.PEOPLE.find(p => p.id === personId);
+  if (!person) return;
+  
+  const nowM = nowMinutes();
+  const allProblems = (person.tasks || []).filter(t => {
+    return isOverdueCompleted(person.id, t.id) || 
+      (() => {
+        const tm = getTaskTime(t);
+        return tm && nowM >= minutesOf(tm) + 30 && !isChecked(person.id, t.id) && !isOverdueCompleted(person.id, t.id) && !isSkipped(person.id, t.id);
+      })();
+  });
+  
+  for (const task of allProblems) {
+    await setSkipped(person.id, task.id, true);
+  }
+  
+  window.currentForgivenessOverlay.remove();
+  renderDashboard();
+};
+
+window.forgivePeriod = async function(personId, period) {
+  if (!await confirmDialog(`Forgive all ${period} tasks? This will clear their penalties.`)) return;
+  
+  const person = app.PEOPLE.find(p => p.id === personId);
+  if (!person) return;
+  
+  const nowM = nowMinutes();
+  const periodTasks = (person.tasks || []).filter(t => {
+    if (t.when !== period) return false;
+    return isOverdueCompleted(person.id, t.id) || 
+      (() => {
+        const tm = getTaskTime(t);
+        return tm && nowM >= minutesOf(tm) + 30 && !isChecked(person.id, t.id) && !isOverdueCompleted(person.id, t.id) && !isSkipped(person.id, t.id);
+      })();
+  });
+  
+  for (const task of periodTasks) {
+    await setSkipped(person.id, task.id, true);
+  }
+  
+  window.currentForgivenessOverlay.remove();
+  renderDashboard();
+};
+
+window.forgiveTask = async function(personId, taskId) {
+  await setSkipped(personId, taskId, true);
+  showForgiveOptions(personId);
+};
 
 function showTaskDetails(personId) {
   const person = app.PEOPLE.find(p => p.id === personId);
