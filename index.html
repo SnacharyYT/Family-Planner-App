@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.5.0
-Last Updated: October 2, 2025 at 5:15 PM
+Version: V0.5.1
+Last Updated: October 2, 2025 at 5:25 PM
 -->
 <html lang="en">
 <head>
@@ -83,6 +83,10 @@ input[type=text],input[type=time],input[type=number],select,input[type=password]
 .theme-preview .c1{flex:1;border-radius:6px 0 0 6px}
 .theme-preview .c2{flex:1;border-radius:0 6px 6px 0}
 .theme-label{font-size:11px;color:var(--muted)}
+.screensaver{position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.screensaver-content{position:absolute;font-size:32px;color:#fff;text-align:center;padding:40px;max-width:80%;line-height:1.6;text-shadow:2px 2px 4px rgba(0,0,0,0.5);animation:floatAround 20s infinite ease-in-out}
+@keyframes floatAround{0%{top:20%;left:10%;opacity:0}10%{opacity:1}45%{opacity:1}55%{opacity:0}60%{top:60%;left:70%;opacity:0}70%{opacity:1}95%{opacity:1}100%{top:20%;left:10%;opacity:0}}
+.screensaver-hint{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.3);font-size:14px}
 .modal-backdrop{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:1000}
 .modal{background:#111827;border:1px solid var(--outline);border-radius:16px;padding:20px;max-width:400px;width:90%}
 .modal-body{margin-bottom:16px;font-size:14px}
@@ -176,7 +180,46 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.5.0';
+const APP_VERSION = 'V0.5.1';
+
+const SCREENSAVER_CONTENT = {
+  verses: [
+    "Be strong and courageous. Do not be afraid; do not be discouraged. - Joshua 1:9",
+    "Trust in the Lord with all your heart. - Proverbs 3:5",
+    "I can do all things through Christ who strengthens me. - Philippians 4:13",
+    "Love is patient, love is kind. - 1 Corinthians 13:4",
+    "For God so loved the world that he gave his one and only Son. - John 3:16",
+    "The Lord is my shepherd; I shall not want. - Psalm 23:1",
+    "Do not worry about tomorrow, for tomorrow will worry about itself. - Matthew 6:34",
+    "Cast all your anxiety on him because he cares for you. - 1 Peter 5:7",
+    "In all things God works for the good of those who love him. - Romans 8:28",
+    "Be still, and know that I am God. - Psalm 46:10"
+  ],
+  facts: [
+    "Honey never spoils. Archaeologists have found 3,000 year old honey in Egyptian tombs that's still edible!",
+    "A group of flamingos is called a 'flamboyance'.",
+    "The shortest war in history lasted only 38 minutes between Britain and Zanzibar in 1896.",
+    "Octopuses have three hearts and blue blood.",
+    "Bananas are berries, but strawberries aren't!",
+    "The Great Wall of China is not visible from space with the naked eye.",
+    "A bolt of lightning contains enough energy to toast 100,000 slices of bread.",
+    "The human brain uses 20% of the body's energy despite being only 2% of its weight.",
+    "There are more possible iterations of a chess game than atoms in the observable universe.",
+    "Butterflies can taste with their feet."
+  ],
+  words: [
+    "Serendipity - Finding something good without looking for it",
+    "Resilience - The ability to bounce back from difficulties",
+    "Gratitude - Being thankful for what you have",
+    "Perseverance - Continuing despite challenges",
+    "Compassion - Deep awareness of others' suffering with desire to help",
+    "Integrity - Doing the right thing even when no one is watching",
+    "Courage - Strength in the face of fear",
+    "Wisdom - The quality of having experience and good judgment",
+    "Kindness - Being friendly, generous, and considerate",
+    "Hope - A feeling of expectation and desire for a certain thing to happen"
+  ]
+};
 
 const COLOR_THEMES = {
   blue: {name: 'Ocean Blue', primary: '#1e3a8a', secondary: '#60a5fa', bg: 'linear-gradient(180deg, #0c1e44, #0f172a)', card: 'rgba(30, 58, 138, 0.15)'},
@@ -454,6 +497,27 @@ function getPetState(completionPct, person, nowMins) {
 
 function getDateStamp(date = new Date()) {
   return date.getFullYear() + '-' + (date.getMonth() + 1) + '-' + date.getDate();
+}
+
+function shouldShowTaskToday(task) {
+  const today = new Date();
+  const dayOfWeek = today.getDay(); // 0 = Sunday, 6 = Saturday
+  const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / 86400000);
+  
+  const frequency = task.frequency || 'daily';
+  
+  switch(frequency) {
+    case 'daily':
+      return true;
+    case 'everyother':
+      return dayOfYear % 2 === 0;
+    case 'weekdays':
+      return dayOfWeek >= 1 && dayOfWeek <= 5;
+    case 'weekends':
+      return dayOfWeek === 0 || dayOfWeek === 6;
+    default:
+      return true;
+  }
 }
 
 function groupByWhen(tasks) {
@@ -1765,18 +1829,20 @@ async function renderSummary() {
   // Remove auto-skip logic - just render current state
   
   app.PEOPLE.forEach(p => {
-    // Ensure tasks array exists
+    // Ensure tasks array exists and filter by frequency
     if (!p.tasks || !Array.isArray(p.tasks)) {
       p.tasks = [];
     }
+    const todaysTasks = p.tasks.filter(t => shouldShowTaskToday(t));
+    
     // Calculate completion excluding skipped tasks
-    const nonSkippedTasks = p.tasks.filter(t => !isSkipped(p.id, t.id));
+    const nonSkippedTasks = todaysTasks.filter(t => !isSkipped(p.id, t.id));
     const total = nonSkippedTasks.length;
     const done = nonSkippedTasks.filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
     const pct = total > 0 ? Math.round((done / total) * 100) : 100;
     const overdueDone = overdueCompletedCountForPerson(p);
     const incomplete = incompleteCountForPerson(p);
-    const timing = deriveNowNext(p.tasks, nowM);
+    const timing = deriveNowNext(todaysTasks, nowM);
     const nowChecked = timing.now && timing.now.task && isChecked(p.id, timing.now.task.id);
     const nowSkipped = timing.now && timing.now.task && isSkipped(p.id, timing.now.task.id);
     
@@ -1981,7 +2047,7 @@ async function openDetail(personId) {
   renderIndividualAnalytics(p);
   
   const tasksWrap = document.getElementById('tasks');
-  const groups = groupByWhen(p.tasks);
+  const groups = groupByWhen(p.tasks.filter(t => shouldShowTaskToday(t)));
   
   ['morning', 'afternoon', 'evening'].forEach(when => {
     if (!(groups[when] && groups[when].length)) return;
@@ -2663,6 +2729,12 @@ function createTaskRow(t) {
   row.innerHTML = `
     <input type="text" data-field="timeManual" placeholder="Time (e.g., 6:07 AM)" value="${t.time ? timeString12(t.time) : ''}"/>
     <input type="text" placeholder="Task label" value="${escapeHtml(t.label || '')}" data-field="label"/>
+    <select data-field="frequency">
+      <option value="daily" ${(t.frequency || 'daily') === 'daily' ? 'selected' : ''}>Daily</option>
+      <option value="everyother" ${t.frequency === 'everyother' ? 'selected' : ''}>Every Other Day</option>
+      <option value="weekdays" ${t.frequency === 'weekdays' ? 'selected' : ''}>Weekdays</option>
+      <option value="weekends" ${t.frequency === 'weekends' ? 'selected' : ''}>Weekends</option>
+    </select>
     <button class="btn small" data-action="removeTask">Remove</button>
   `;
   
@@ -2863,11 +2935,12 @@ async function saveEditor() {
     card.querySelectorAll('.task-row').forEach(tr => {
       const label = tr.querySelector('input[data-field="label"]').value.trim();
       const manual = tr.querySelector('input[data-field="timeManual"]').value;
+      const frequency = tr.querySelector('select[data-field="frequency"]').value;
       const time = parseTimeFlexible(manual);
       const when = determineTaskPeriod(time);
       
       if (label) {
-        tasks.push({id: tr.dataset.taskId || uid('t'), label, when, time});
+        tasks.push({id: tr.dataset.taskId || uid('t'), label, when, time, frequency: frequency || 'daily'});
       }
     });
     
@@ -3003,6 +3076,44 @@ function updateClockAndCountdown() {
   }
 }
 
+function startScreensaver() {
+  const allContent = [
+    ...SCREENSAVER_CONTENT.verses,
+    ...SCREENSAVER_CONTENT.facts,
+    ...SCREENSAVER_CONTENT.words
+  ];
+  
+  let currentIndex = Math.floor(Math.random() * allContent.length);
+  
+  const screensaver = document.createElement('div');
+  screensaver.className = 'screensaver';
+  screensaver.innerHTML = `
+    <div class="screensaver-content" id="screensaverText">${escapeHtml(allContent[currentIndex])}</div>
+    <div class="screensaver-hint">Tap anywhere to exit</div>
+  `;
+  
+  document.body.appendChild(screensaver);
+  
+  // Rotate content every 15 seconds
+  const rotateInterval = setInterval(() => {
+    currentIndex = (currentIndex + 1) % allContent.length;
+    const textEl = document.getElementById('screensaverText');
+    if (textEl) {
+      textEl.style.animation = 'none';
+      setTimeout(() => {
+        textEl.textContent = allContent[currentIndex];
+        textEl.style.animation = 'floatAround 20s infinite ease-in-out';
+      }, 50);
+    }
+  }, 15000);
+  
+  // Click to exit
+  screensaver.onclick = () => {
+    clearInterval(rotateInterval);
+    screensaver.remove();
+  };
+}
+
 const app = {
   CONFIG: null,
   state: null,
@@ -3086,6 +3197,7 @@ const app = {
   
   app.dom.todayBtn.addEventListener('click', renderSummary);
   app.dom.statsBtn.addEventListener('click', renderDashboard);
+  app.dom.screensaverBtn.addEventListener('click', startScreensaver);
   app.dom.editBtn.addEventListener('click', async () => {
     if (!app.CONFIG.pinEnabled) {
       renderEditor();
