@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.5.1
-Last Updated: October 2, 2025 at 5:25 PM
+Version: V0.5.2
+Last Updated: October 2, 2025 at 5:35 PM
 -->
 <html lang="en">
 <head>
@@ -180,7 +180,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.5.1';
+const APP_VERSION = 'V0.5.2';
 
 const SCREENSAVER_CONTENT = {
   verses: [
@@ -247,6 +247,9 @@ const DEFAULT_CONFIG = {
   pinSalt: null,
   pinHint: '',
   recoveryPhrase: '',
+  screensaverEnabled: true,
+  screensaverTimeout: 300,
+  screensaverGenre: 'all',
   people: []
 };
 
@@ -1900,6 +1903,7 @@ async function renderSummary() {
   
   updateDayProgress();
   applyColorTheme(app.CONFIG.colorTheme || 'blue');
+  resetInactivityTimer();
 }
 
 async function openDetail(personId) {
@@ -2197,6 +2201,35 @@ function renderEditor() {
     </div>
     
     <div class="form-card">
+      <h2 style="margin:0 0 12px 0">Screensaver Settings</h2>
+      <div class="form-row">
+        <div class="field">
+          <label>Screensaver</label>
+          <div class="toggle-switch ${app.CONFIG.screensaverEnabled !== false ? 'active' : 'inactive'}" id="screensaverToggle">
+            <div class="toggle-slider">${app.CONFIG.screensaverEnabled !== false ? 'ON' : 'OFF'}</div>
+            <div class="toggle-labels">
+              <div class="toggle-label no">OFF</div>
+              <div class="toggle-label yes">ON</div>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="screensaverTimeoutInput">Inactivity timeout (seconds)</label>
+          <input id="screensaverTimeoutInput" type="number" min="30" max="3600" value="${app.CONFIG.screensaverTimeout || 300}"/>
+        </div>
+      </div>
+      <div class="field">
+        <label for="screensaverGenreInput">Content Type</label>
+        <select id="screensaverGenreInput">
+          <option value="all" ${(app.CONFIG.screensaverGenre || 'all') === 'all' ? 'selected' : ''}>All Content</option>
+          <option value="verses" ${app.CONFIG.screensaverGenre === 'verses' ? 'selected' : ''}>Bible Verses Only</option>
+          <option value="facts" ${app.CONFIG.screensaverGenre === 'facts' ? 'selected' : ''}>Facts Only</option>
+          <option value="words" ${app.CONFIG.screensaverGenre === 'words' ? 'selected' : ''}>Words Only</option>
+        </select>
+      </div>
+    </div>
+    
+    <div class="form-card">
       <h2 style="margin:0 0 12px 0">Family Settings</h2>
       <div class="form-row">
         <div class="field">
@@ -2441,6 +2474,20 @@ function renderEditor() {
       pinToggle.classList.remove('inactive');
       pinToggle.classList.add('active');
       pinToggle.querySelector('.toggle-slider').textContent = 'YES';
+    }
+  };
+  
+  const screensaverToggle = document.getElementById('screensaverToggle');
+  screensaverToggle.onclick = () => {
+    const isActive = screensaverToggle.classList.contains('active');
+    if (isActive) {
+      screensaverToggle.classList.remove('active');
+      screensaverToggle.classList.add('inactive');
+      screensaverToggle.querySelector('.toggle-slider').textContent = 'OFF';
+    } else {
+      screensaverToggle.classList.remove('inactive');
+      screensaverToggle.classList.add('active');
+      screensaverToggle.querySelector('.toggle-slider').textContent = 'ON';
     }
   };
   
@@ -2793,6 +2840,11 @@ async function saveEditor() {
     app.CONFIG.pinEnabled = false;
   }
   
+  const screensaverToggle = document.getElementById('screensaverToggle');
+  app.CONFIG.screensaverEnabled = screensaverToggle.classList.contains('active');
+  app.CONFIG.screensaverTimeout = Math.max(30, parseInt(document.getElementById('screensaverTimeoutInput').value, 10) || 300);
+  app.CONFIG.screensaverGenre = document.getElementById('screensaverGenreInput').value;
+  
   const selectedTheme = document.querySelector('.theme-option.selected');
   if (selectedTheme) {
     app.CONFIG.colorTheme = selectedTheme.dataset.theme;
@@ -3077,11 +3129,20 @@ function updateClockAndCountdown() {
 }
 
 function startScreensaver() {
-  const allContent = [
-    ...SCREENSAVER_CONTENT.verses,
-    ...SCREENSAVER_CONTENT.facts,
-    ...SCREENSAVER_CONTENT.words
-  ];
+  if (app.CONFIG.screensaverEnabled === false) return;
+  
+  let allContent;
+  const genre = app.CONFIG.screensaverGenre || 'all';
+  
+  if (genre === 'all') {
+    allContent = [
+      ...SCREENSAVER_CONTENT.verses,
+      ...SCREENSAVER_CONTENT.facts,
+      ...SCREENSAVER_CONTENT.words
+    ];
+  } else {
+    allContent = SCREENSAVER_CONTENT[genre] || SCREENSAVER_CONTENT.verses;
+  }
   
   let currentIndex = Math.floor(Math.random() * allContent.length);
   
@@ -3111,8 +3172,28 @@ function startScreensaver() {
   screensaver.onclick = () => {
     clearInterval(rotateInterval);
     screensaver.remove();
+    resetInactivityTimer();
   };
 }
+
+let inactivityTimer = null;
+
+function resetInactivityTimer() {
+  if (inactivityTimer) clearTimeout(inactivityTimer);
+  
+  // Only set timer if screensaver is enabled and we're on a detail page
+  if (app.CONFIG.screensaverEnabled !== false && !app.dom.detailEl.classList.contains('hidden')) {
+    const timeout = (app.CONFIG.screensaverTimeout || 300) * 1000;
+    inactivityTimer = setTimeout(() => {
+      renderSummary();
+    }, 30000); // 30 seconds for detail view to return to home
+  }
+}
+
+// Add event listeners to reset timer on activity
+['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'].forEach(event => {
+  document.addEventListener(event, resetInactivityTimer, true);
+});
 
 const app = {
   CONFIG: null,
@@ -3132,6 +3213,7 @@ const app = {
     subtitle: document.getElementById('subtitle'),
     todayBtn: document.getElementById('todayBtn'),
     statsBtn: document.getElementById('statsBtn'),
+    screensaverBtn: document.getElementById('screensaverBtn'),
     editBtn: document.getElementById('editBtn'),
     clockEl: document.getElementById('clock'),
     bedtimeEl: document.getElementById('bedtime'),
