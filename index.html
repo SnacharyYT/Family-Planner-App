@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.5.7
-Last Updated: October 2, 2025 at 6:00 PM
+Version: V0.5.8
+Last Updated: October 2, 2025 at 6:05 PM
 -->
 <html lang="en">
 <head>
@@ -180,7 +180,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.5.7';
+const APP_VERSION = 'V0.5.8';
 
 const SCREENSAVER_CONTENT = {
   verses: [
@@ -3269,11 +3269,30 @@ const app = {
     app.dom.statsBtn.addEventListener('click', renderDashboard);
     
     console.log('Screensaver button element:', app.dom.screensaverBtn);
+    
+    // If screensaver button doesn't exist, create it programmatically
+    if (!app.dom.screensaverBtn) {
+      console.log('Creating screensaver button programmatically...');
+      const screensaverBtn = document.createElement('button');
+      screensaverBtn.id = 'screensaverBtn';
+      screensaverBtn.className = 'btn small';
+      screensaverBtn.textContent = '💫';
+      screensaverBtn.title = 'Start Screensaver';
+      
+      // Insert it before the edit button
+      const rightDiv = document.querySelector('.header-top .right');
+      rightDiv.insertBefore(screensaverBtn, app.dom.editBtn);
+      
+      // Update the DOM reference
+      app.dom.screensaverBtn = screensaverBtn;
+      console.log('Screensaver button created and added to DOM');
+    }
+    
     if (app.dom.screensaverBtn) {
       app.dom.screensaverBtn.addEventListener('click', startScreensaver);
       console.log('Screensaver button listener attached');
     } else {
-      console.error('Screensaver button not found in DOM!');
+      console.error('Screensaver button still not found after creation attempt!');
     }
     
     app.dom.editBtn.addEventListener('click', async () => {
