@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.5.3
-Last Updated: October 2, 2025 at 5:40 PM
+Version: V0.5.4
+Last Updated: October 2, 2025 at 5:45 PM
 -->
 <html lang="en">
 <head>
@@ -180,7 +180,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.5.3';
+const APP_VERSION = 'V0.5.4';
 
 const SCREENSAVER_CONTENT = {
   verses: [
@@ -3211,116 +3211,125 @@ const app = {
 
 // Initialize app with Firebase data
 (async function initApp() {
-  app.CONFIG = await loadConfig();
-  app.state = await loadState();
-  app.goalState = await loadGoalState();
-  app.PEOPLE = app.CONFIG.people || [];
-  
-  applyColorTheme(app.CONFIG.colorTheme || 'blue');
-  
-  // Set up real-time listeners for sync
-  onValue(ref(database, 'state'), (snapshot) => {
-    // Don't block listener updates - we want to see all changes
-    if (snapshot.exists()) {
-      const newState = snapshot.val();
-      console.log('Received state from Firebase:', JSON.stringify(newState, null, 2)); // Debug log
-      
-      // Ensure all required properties exist (Firebase removes empty objects)
-      if (!newState.checked) newState.checked = {};
-      if (!newState.skipped) newState.skipped = {};
-      if (!newState.overdueCompleted) newState.overdueCompleted = {};
-      
-      app.state = newState;
-      
-      // Always re-render the current view when state changes (unless actively saving)
-      if (!syncInProgress) {
-        if (!app.dom.summaryEl.classList.contains('hidden')) {
-          renderSummary();
-        } else if (!app.dom.detailEl.classList.contains('hidden') && app.CURRENT_PERSON) {
+  try {
+    app.CONFIG = await loadConfig();
+    app.state = await loadState();
+    app.goalState = await loadGoalState();
+    app.PEOPLE = app.CONFIG.people || [];
+    
+    applyColorTheme(app.CONFIG.colorTheme || 'blue');
+    
+    // Set up real-time listeners for sync
+    onValue(ref(database, 'state'), (snapshot) => {
+      // Don't block listener updates - we want to see all changes
+      if (snapshot.exists()) {
+        const newState = snapshot.val();
+        console.log('Received state from Firebase:', JSON.stringify(newState, null, 2)); // Debug log
+        
+        // Ensure all required properties exist (Firebase removes empty objects)
+        if (!newState.checked) newState.checked = {};
+        if (!newState.skipped) newState.skipped = {};
+        if (!newState.overdueCompleted) newState.overdueCompleted = {};
+        
+        app.state = newState;
+        
+        // Always re-render the current view when state changes (unless actively saving)
+        if (!syncInProgress) {
+          if (!app.dom.summaryEl.classList.contains('hidden')) {
+            renderSummary();
+          } else if (!app.dom.detailEl.classList.contains('hidden') && app.CURRENT_PERSON) {
+            openDetail(app.CURRENT_PERSON);
+          }
+        }
+      }
+    });
+    
+    onValue(ref(database, 'config'), (snapshot) => {
+      if (snapshot.exists() && !syncInProgress) {
+        const data = snapshot.val();
+        // Ensure people array exists
+        if (!data.people) data.people = [];
+        app.CONFIG = data;
+        app.PEOPLE = app.CONFIG.people || [];
+        app.dom.appTitleEl.textContent = app.CONFIG.appTitle;
+        applyColorTheme(app.CONFIG.colorTheme || 'blue');
+      }
+    });
+    
+    onValue(ref(database, 'goals'), (snapshot) => {
+      if (snapshot.exists() && !syncInProgress) {
+        app.goalState = snapshot.val();
+        if (!app.dom.detailEl.classList.contains('hidden') && app.CURRENT_PERSON) {
           openDetail(app.CURRENT_PERSON);
         }
       }
-    }
-  });
-  
-  onValue(ref(database, 'config'), (snapshot) => {
-    if (snapshot.exists() && !syncInProgress) {
-      const data = snapshot.val();
-      // Ensure people array exists
-      if (!data.people) data.people = [];
-      app.CONFIG = data;
-      app.PEOPLE = app.CONFIG.people || [];
-      app.dom.appTitleEl.textContent = app.CONFIG.appTitle;
-      applyColorTheme(app.CONFIG.colorTheme || 'blue');
-    }
-  });
-  
-  onValue(ref(database, 'goals'), (snapshot) => {
-    if (snapshot.exists() && !syncInProgress) {
-      app.goalState = snapshot.val();
-      if (!app.dom.detailEl.classList.contains('hidden') && app.CURRENT_PERSON) {
-        openDetail(app.CURRENT_PERSON);
-      }
-    }
-  });
-  
-  app.dom.todayBtn.addEventListener('click', renderSummary);
-  app.dom.statsBtn.addEventListener('click', renderDashboard);
-  app.dom.screensaverBtn.addEventListener('click', startScreensaver);
-  app.dom.editBtn.addEventListener('click', async () => {
-    if (!app.CONFIG.pinEnabled) {
-      renderEditor();
-    } else if (Date.now() < app.AUTH_UNTIL) {
-      renderEditor();
-    } else {
-      const unlocked = await pinDialog();
-      if (unlocked) {
-        app.AUTH_UNTIL = Date.now() + (5 * 60 * 1000);
-        renderEditor();
-      }
-    }
-  });
-  
-  await ensureDailyReset();
-  
-  // Save daily snapshot at midnight
-  const now = new Date();
-  const midnight = new Date(now);
-  midnight.setHours(24, 0, 0, 0);
-  const msUntilMidnight = midnight - now;
-  
-  setTimeout(() => {
-    saveHistoricalSnapshot();
-    // Set up daily interval
-    setInterval(saveHistoricalSnapshot, 24 * 60 * 60 * 1000);
-  }, msUntilMidnight);
-  
-  app.dom.appTitleEl.textContent = app.CONFIG.appTitle;
-  app.dom.subtitle.textContent = new Date().toLocaleDateString([], {weekday: 'long', month: 'long', day: 'numeric'});
-  
-  renderSummary();
-  updateClockAndCountdown();
-  updateDayProgress();
-  setInterval(updateClockAndCountdown, 1000);
-  
-  // Set up inactivity timer after app is initialized
-  let inactivityTimer = null;
-  
-  window.resetInactivityTimer = function() {
-    if (inactivityTimer) clearTimeout(inactivityTimer);
+    });
     
-    // Only set timer if we're on a detail page
-    if (!app.dom.detailEl.classList.contains('hidden')) {
-      inactivityTimer = setTimeout(() => {
-        renderSummary();
-      }, 30000); // 30 seconds for detail view to return to home
+    app.dom.todayBtn.addEventListener('click', renderSummary);
+    app.dom.statsBtn.addEventListener('click', renderDashboard);
+    
+    if (app.dom.screensaverBtn) {
+      app.dom.screensaverBtn.addEventListener('click', startScreensaver);
     }
-  };
-  
-  // Add event listeners to reset timer on activity
-  ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'].forEach(event => {
-    document.addEventListener(event, window.resetInactivityTimer, true);
-  });
+    
+    app.dom.editBtn.addEventListener('click', async () => {
+      if (!app.CONFIG.pinEnabled) {
+        renderEditor();
+      } else if (Date.now() < app.AUTH_UNTIL) {
+        renderEditor();
+      } else {
+        const unlocked = await pinDialog();
+        if (unlocked) {
+          app.AUTH_UNTIL = Date.now() + (5 * 60 * 1000);
+          renderEditor();
+        }
+      }
+    });
+    
+    await ensureDailyReset();
+    
+    // Save daily snapshot at midnight
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0);
+    const msUntilMidnight = midnight - now;
+    
+    setTimeout(() => {
+      saveHistoricalSnapshot();
+      // Set up daily interval
+      setInterval(saveHistoricalSnapshot, 24 * 60 * 60 * 1000);
+    }, msUntilMidnight);
+    
+    app.dom.appTitleEl.textContent = app.CONFIG.appTitle;
+    app.dom.subtitle.textContent = new Date().toLocaleDateString([], {weekday: 'long', month: 'long', day: 'numeric'});
+    
+    renderSummary();
+    updateClockAndCountdown();
+    updateDayProgress();
+    setInterval(updateClockAndCountdown, 1000);
+    
+    // Set up inactivity timer after app is initialized
+    let inactivityTimer = null;
+    
+    window.resetInactivityTimer = function() {
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+      
+      // Only set timer if we're on a detail page
+      if (!app.dom.detailEl.classList.contains('hidden')) {
+        inactivityTimer = setTimeout(() => {
+          renderSummary();
+        }, 30000); // 30 seconds for detail view to return to home
+      }
+    };
+    
+    // Add event listeners to reset timer on activity
+    ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'].forEach(event => {
+      document.addEventListener(event, window.resetInactivityTimer, true);
+    });
+  } catch (error) {
+    console.error('Error initializing app:', error);
+    alert('Error loading app. Please refresh the page. Error: ' + error.message);
+  }
 })();
 
 })();
