@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.5.2
-Last Updated: October 2, 2025 at 5:35 PM
+Version: V0.5.3
+Last Updated: October 2, 2025 at 5:40 PM
 -->
 <html lang="en">
 <head>
@@ -180,7 +180,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.5.2';
+const APP_VERSION = 'V0.5.3';
 
 const SCREENSAVER_CONTENT = {
   verses: [
@@ -1903,7 +1903,11 @@ async function renderSummary() {
   
   updateDayProgress();
   applyColorTheme(app.CONFIG.colorTheme || 'blue');
-  resetInactivityTimer();
+  
+  // Reset inactivity timer when opening detail view
+  if (window.resetInactivityTimer) {
+    window.resetInactivityTimer();
+  }
 }
 
 async function openDetail(personId) {
@@ -3172,28 +3176,11 @@ function startScreensaver() {
   screensaver.onclick = () => {
     clearInterval(rotateInterval);
     screensaver.remove();
-    resetInactivityTimer();
+    if (window.resetInactivityTimer) {
+      window.resetInactivityTimer();
+    }
   };
 }
-
-let inactivityTimer = null;
-
-function resetInactivityTimer() {
-  if (inactivityTimer) clearTimeout(inactivityTimer);
-  
-  // Only set timer if screensaver is enabled and we're on a detail page
-  if (app.CONFIG.screensaverEnabled !== false && !app.dom.detailEl.classList.contains('hidden')) {
-    const timeout = (app.CONFIG.screensaverTimeout || 300) * 1000;
-    inactivityTimer = setTimeout(() => {
-      renderSummary();
-    }, 30000); // 30 seconds for detail view to return to home
-  }
-}
-
-// Add event listeners to reset timer on activity
-['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'].forEach(event => {
-  document.addEventListener(event, resetInactivityTimer, true);
-});
 
 const app = {
   CONFIG: null,
@@ -3315,6 +3302,25 @@ const app = {
   updateClockAndCountdown();
   updateDayProgress();
   setInterval(updateClockAndCountdown, 1000);
+  
+  // Set up inactivity timer after app is initialized
+  let inactivityTimer = null;
+  
+  window.resetInactivityTimer = function() {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    
+    // Only set timer if we're on a detail page
+    if (!app.dom.detailEl.classList.contains('hidden')) {
+      inactivityTimer = setTimeout(() => {
+        renderSummary();
+      }, 30000); // 30 seconds for detail view to return to home
+    }
+  };
+  
+  // Add event listeners to reset timer on activity
+  ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'].forEach(event => {
+    document.addEventListener(event, window.resetInactivityTimer, true);
+  });
 })();
 
 })();
