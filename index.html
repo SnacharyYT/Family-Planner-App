@@ -1,14 +1,17 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.5.8
-Last Updated: October 2, 2025 at 6:05 PM
+Version: V0.6.1
+Last Updated: October 2, 2025 at 6:15 PM
 -->
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Family Checklists</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0f172a;--card:#111827;--muted:#94a3b8;--text:#e5e7eb;--accent:#60a5fa;--accent-2:#34d399;--danger:#f87171;--outline:rgba(148,163,184,.25);--success-fg:#052e1b}
 *{box-sizing:border-box}
@@ -85,6 +88,7 @@ input[type=text],input[type=time],input[type=number],select,input[type=password]
 .theme-label{font-size:11px;color:var(--muted)}
 .screensaver{position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .screensaver-content{position:absolute;font-size:32px;color:#fff;text-align:center;padding:40px;max-width:80%;line-height:1.6;text-shadow:2px 2px 4px rgba(0,0,0,0.5);animation:floatAround 20s infinite ease-in-out}
+.screensaver-content.verse{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:36px;line-height:1.8}
 @keyframes floatAround{0%{top:20%;left:10%;opacity:0}10%{opacity:1}45%{opacity:1}55%{opacity:0}60%{top:60%;left:70%;opacity:0}70%{opacity:1}95%{opacity:1}100%{top:20%;left:10%;opacity:0}}
 .screensaver-hint{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.3);font-size:14px}
 .modal-backdrop{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:1000}
@@ -180,32 +184,72 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.5.8';
+const APP_VERSION = 'V0.6.1';
 
 const SCREENSAVER_CONTENT = {
   verses: [
-    "Be strong and courageous. Do not be afraid; do not be discouraged. - Joshua 1:9",
-    "Trust in the Lord with all your heart. - Proverbs 3:5",
-    "I can do all things through Christ who strengthens me. - Philippians 4:13",
-    "Love is patient, love is kind. - 1 Corinthians 13:4",
-    "For God so loved the world that he gave his one and only Son. - John 3:16",
-    "The Lord is my shepherd; I shall not want. - Psalm 23:1",
-    "Do not worry about tomorrow, for tomorrow will worry about itself. - Matthew 6:34",
-    "Cast all your anxiety on him because he cares for you. - 1 Peter 5:7",
-    "In all things God works for the good of those who love him. - Romans 8:28",
-    "Be still, and know that I am God. - Psalm 46:10"
+    "James 1:27 – Religion that is pure and undefiled before God the Father is this: to visit orphans and widows in their affliction, and to keep oneself unstained from the world.",
+    "Psalm 145:9 – The LORD is good to all, and his mercy is over all that he has made.",
+    "Joshua 1:9 – Have I not commanded you? Be strong and courageous. Do not be frightened, and do not be dismayed, for the LORD your God is with you wherever you go.",
+    "Philippians 4:4 – Rejoice in the Lord always; again I will say, rejoice!",
+    "Matthew 22:39 – And a second is like it: You shall love your neighbor as yourself.",
+    "Numbers 6:24 – The LORD bless you and keep you.",
+    "Colossians 3:2 – Set your minds on things that are above, not on things that are on earth.",
+    "Colossians 3:16 – Let the word of Christ dwell in you richly, teaching and admonishing one another in all wisdom, singing psalms and hymns and spiritual songs, with thankfulness in your hearts to God.",
+    "1 John 5:3 – For this is the love of God, that we keep his commandments. And his commandments are not burdensome.",
+    "Proverbs 30:5 – Every word of God proves true; he is a shield to those who take refuge in him.",
+    "Hebrews 13:8 – Jesus Christ is the same yesterday, today and forever.",
+    "Psalm 150:6 – Let everything that has breath praise the LORD! Praise the LORD!",
+    "Proverbs 3:5 – Trust in the LORD with all your heart, and do not lean on your own understanding.",
+    "Romans 10:13 – For 'everyone who calls on the name of the Lord will be saved.'",
+    "Romans 3:23 – For all have sinned and fall short of the glory of God.",
+    "Matthew 5:14 – You are the light of the world. A city set on a hill cannot be hidden.",
+    "Psalm 139:14 – I praise you, for I am fearfully and wonderfully made. Wonderful are your works; my soul knows it very well.",
+    "Colossians 3:20 – Children, obey your parents in everything, for this pleases the Lord.",
+    "James 1:17 – Every good gift and every perfect gift is from above, coming down from the Father of lights, with whom there is no variation or shadow due to change.",
+    "1 John 1:5 – This is the message we have heard from him and proclaim to you, that God is light, and in him is no darkness at all.",
+    "Ephesians 4:32 – Be kind to one another, tenderhearted, forgiving one another, as God in Christ forgave you.",
+    "1 John 3:23 – And this is his commandment, that we believe in the name of his Son Jesus Christ and love one another, just as he has commanded us.",
+    "Psalm 56:3 – When I am afraid, I put my trust in you.",
+    "Psalm 118:24 – This is the day that the LORD has made; let us rejoice and be glad in it.",
+    "Psalm 119:105 – Your word is a lamp to my feet and a light to my path.",
+    "Psalm 136:1 – Give thanks to the LORD, for he is good, for his steadfast love endures forever.",
+    "Luke 6:31 – And as you wish that others would do to you, do so to them.",
+    "Philippians 4:13 – I can do all things through him who strengthens me.",
+    "Psalm 138:1 – I give you thanks, O LORD, with my whole heart; before the gods I sing your praise.",
+    "Isaiah 30:15 – For thus said the Lord GOD, the Holy One of Israel, 'In returning and rest you shall be saved; in quietness and in trust shall be your strength.'"
   ],
   facts: [
-    "Honey never spoils. Archaeologists have found 3,000 year old honey in Egyptian tombs that's still edible!",
-    "A group of flamingos is called a 'flamboyance'.",
-    "The shortest war in history lasted only 38 minutes between Britain and Zanzibar in 1896.",
-    "Octopuses have three hearts and blue blood.",
-    "Bananas are berries, but strawberries aren't!",
-    "The Great Wall of China is not visible from space with the naked eye.",
-    "A bolt of lightning contains enough energy to toast 100,000 slices of bread.",
-    "The human brain uses 20% of the body's energy despite being only 2% of its weight.",
-    "There are more possible iterations of a chess game than atoms in the observable universe.",
-    "Butterflies can taste with their feet."
+    "A cloud weighs around a million tonnes with a density around 0.4% lower than the air surrounding it.",
+    "Giraffes are 30 times more likely to get hit by lightning than people.",
+    "Identical twins don't have the same fingerprints due to environmental factors in the womb.",
+    "Earth's rotation is slowing - the length of a day increases by around 1.8 seconds per century.",
+    "Your brain constantly eats itself through phagocytosis, which helps preserve your grey matter.",
+    "The Universe's average colour is called 'Cosmic latte' - a beige close to white.",
+    "Water might not be wet - scientists define wetness as a liquid's ability to maintain contact with a solid surface.",
+    "A chicken named Mike lived for 18 months without a head in the 1940s.",
+    "Wearing a tie can reduce blood flow to the brain by 7.5 percent.",
+    "The world's oldest dog, Bluey, lived to 29.5 years old.",
+    "Mount Everest isn't the tallest mountain - Mauna Kea in Hawaii is 10.2km tall when measured from its base underwater.",
+    "Octopuses don't have tentacles - they have eight arms with suckers down most of their length.",
+    "Comets smell like rotten eggs, urine, burning matches, and almonds.",
+    "Chainsaws were first invented in the late 1700s to help with childbirth.",
+    "The T.rex likely had feathers based on discoveries of feathered tyrannosaur ancestors.",
+    "Snails have between 1,000 and 12,000 teeth on their file-like tongues.",
+    "A horse can produce up to 24 horsepower at maximum effort.",
+    "Bananas are radioactive due to containing the natural isotope potassium-40.",
+    "Hippos can't swim - they perform a slow-motion gallop on the riverbed instead.",
+    "You can yo-yo in space because it relies on conservation of angular momentum.",
+    "Starfish don't have bodies - their entire form is technically classified as a head.",
+    "Most ginger cats are male - there are roughly three ginger males to one ginger female.",
+    "There's a planet called 55 Cancri e that's mostly made from diamond.",
+    "Platypuses sweat milk because they don't have teats.",
+    "LEGO bricks can support 375,000 other bricks before failing - theoretically building a 3.5km tower.",
+    "Protons come in different shapes including peanuts, rugby balls, bagels, and spheres.",
+    "All mammals get goosebumps through piloerection to trap an insulating air layer.",
+    "The biggest butterfly, Queen Alexandra's Birdwing, has a 31cm wingspan.",
+    "A lightning bolt is five times hotter than the surface of the Sun at 30,000°C.",
+    "Dogs tilt their heads when you speak to better pinpoint familiar words like 'walkies'."
   ],
   words: [
     "Serendipity - Finding something good without looking for it",
@@ -3136,24 +3180,34 @@ function startScreensaver() {
   if (app.CONFIG.screensaverEnabled === false) return;
   
   let allContent;
+  let contentType = 'mixed';
   const genre = app.CONFIG.screensaverGenre || 'all';
   
   if (genre === 'all') {
     allContent = [
-      ...SCREENSAVER_CONTENT.verses,
-      ...SCREENSAVER_CONTENT.facts,
-      ...SCREENSAVER_CONTENT.words
+      ...SCREENSAVER_CONTENT.verses.map(v => ({text: v, type: 'verse'})),
+      ...SCREENSAVER_CONTENT.facts.map(f => ({text: f, type: 'fact'})),
+      ...SCREENSAVER_CONTENT.words.map(w => ({text: w, type: 'word'}))
     ];
-  } else {
-    allContent = SCREENSAVER_CONTENT[genre] || SCREENSAVER_CONTENT.verses;
+  } else if (genre === 'verses') {
+    allContent = SCREENSAVER_CONTENT.verses.map(v => ({text: v, type: 'verse'}));
+    contentType = 'verse';
+  } else if (genre === 'facts') {
+    allContent = SCREENSAVER_CONTENT.facts.map(f => ({text: f, type: 'fact'}));
+    contentType = 'fact';
+  } else if (genre === 'words') {
+    allContent = SCREENSAVER_CONTENT.words.map(w => ({text: w, type: 'word'}));
+    contentType = 'word';
   }
   
   let currentIndex = Math.floor(Math.random() * allContent.length);
   
   const screensaver = document.createElement('div');
   screensaver.className = 'screensaver';
+  
+  const contentClass = allContent[currentIndex].type === 'verse' ? 'screensaver-content verse' : 'screensaver-content';
   screensaver.innerHTML = `
-    <div class="screensaver-content" id="screensaverText">${escapeHtml(allContent[currentIndex])}</div>
+    <div class="${contentClass}" id="screensaverText">${escapeHtml(allContent[currentIndex].text)}</div>
     <div class="screensaver-hint">Tap anywhere to exit</div>
   `;
   
@@ -3166,7 +3220,8 @@ function startScreensaver() {
     if (textEl) {
       textEl.style.animation = 'none';
       setTimeout(() => {
-        textEl.textContent = allContent[currentIndex];
+        textEl.textContent = allContent[currentIndex].text;
+        textEl.className = allContent[currentIndex].type === 'verse' ? 'screensaver-content verse' : 'screensaver-content';
         textEl.style.animation = 'floatAround 20s infinite ease-in-out';
       }, 50);
     }
