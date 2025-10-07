@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.7.5
+Version: V0.7.6
 Last Updated: October 7, 2025 at 10:45 AM
 -->
 <html lang="en">
@@ -183,7 +183,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.7.5';
+const APP_VERSION = 'V0.7.6';
 
 const SCREENSAVER_CONTENT = {
   verses: [
@@ -511,22 +511,45 @@ function stampFor(date) {
 
 function getPetState(completionPct, person, nowMins) {
 // Check for incomplete tasks first (highest priority) - excluding skipped and optional
+// Only trigger "needs attention" for tasks in the current or upcoming time periods
 if (person && person.tasks) {
+  const morningEndMins = minutesOf(app.CONFIG.morningEnd || {h: 12, m: 0});
+  const afternoonEndMins = minutesOf(app.CONFIG.afternoonEnd || {h: 17, m: 0});
+  
   const hasIncomplete = person.tasks.some(t => {
     if (isSkipped(person.id, t.id) || t.optional) return false; // Exclude skipped and optional tasks
     const tm = getTaskTime(t);
-    return tm && nowMins >= minutesOf(tm) + 30 && !isChecked(person.id, t.id) && !isOverdueCompleted(person.id, t.id);
-  });
-    if (hasIncomplete) {
-      return {emoji: '😄', state: 'needs attention', color: '#ef4444', indicator: '💢'};
+    if (!tm) return false;
+    
+    const isOverdue = nowMins >= minutesOf(tm) + 30;
+    const isNotCompleted = !isChecked(person.id, t.id) && !isOverdueCompleted(person.id, t.id);
+    
+    if (!isOverdue || !isNotCompleted) return false;
+    
+    // Only show "needs attention" if the task's time period hasn't fully passed
+    if (t.when === 'morning') {
+      // Morning tasks only trigger attention if we're still in morning
+      return nowMins < morningEndMins;
+    } else if (t.when === 'afternoon') {
+      // Afternoon tasks only trigger attention if we're still in afternoon or earlier
+      return nowMins < afternoonEndMins;
+    } else if (t.when === 'evening') {
+      // Evening tasks always trigger attention (until daily reset)
+      return true;
     }
-  }
+    
+    return false;
+  });
   
+  if (hasIncomplete) {
+    return {emoji: '😄', state: 'needs attention', color: '#ef4444', indicator: '💢'};
+  }
+}
   // Check if within 30 minutes of bedtime
   if (person && person.bedTime) {
     const bedMins = minutesOf(person.bedTime);
     const minsUntilBed = bedMins - nowMins;
-    if (minsUntilBed >= 0 && minsUntilBed <= 30) {
+    if (minsUntilBed >= 0 && minsUntilBed <= 60) {
       return {emoji: '😄', state: 'is getting tired', color: '#8b5cf6', indicator: '💤'};
     }
   }
