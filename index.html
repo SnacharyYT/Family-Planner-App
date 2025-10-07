@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.6.1
-Last Updated: October 2, 2025 at 6:15 PM
+Version: V0.6.2
+Last Updated: October 7, 2025 at 10:45 AM
 -->
 <html lang="en">
 <head>
@@ -87,9 +87,8 @@ input[type=text],input[type=time],input[type=number],select,input[type=password]
 .theme-preview .c2{flex:1;border-radius:0 6px 6px 0}
 .theme-label{font-size:11px;color:var(--muted)}
 .screensaver{position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer}
-.screensaver-content{position:absolute;font-size:32px;color:#fff;text-align:center;padding:40px;max-width:80%;line-height:1.6;text-shadow:2px 2px 4px rgba(0,0,0,0.5);animation:floatAround 20s infinite ease-in-out}
+.screensaver-content{position:absolute;font-size:32px;color:#fff;text-align:center;padding:40px;max-width:80%;line-height:1.6;text-shadow:2px 2px 4px rgba(0,0,0,0.5)}
 .screensaver-content.verse{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:36px;line-height:1.8}
-@keyframes floatAround{0%{top:20%;left:10%;opacity:0}10%{opacity:1}45%{opacity:1}55%{opacity:0}60%{top:60%;left:70%;opacity:0}70%{opacity:1}95%{opacity:1}100%{top:20%;left:10%;opacity:0}}
 .screensaver-hint{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.3);font-size:14px}
 .modal-backdrop{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:1000}
 .modal{background:#111827;border:1px solid var(--outline);border-radius:16px;padding:20px;max-width:400px;width:90%}
@@ -184,7 +183,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.6.1';
+const APP_VERSION = 'V0.6.2';
 
 const SCREENSAVER_CONTENT = {
   verses: [
@@ -3213,19 +3212,61 @@ function startScreensaver() {
   
   document.body.appendChild(screensaver);
   
-  // Rotate content every 15 seconds
+  // DVD-style bouncing animation
+  const textEl = document.getElementById('screensaverText');
+  let x = Math.random() * (window.innerWidth - textEl.offsetWidth);
+  let y = Math.random() * (window.innerHeight - textEl.offsetHeight);
+  let xSpeed = 1.5; // Pixels per frame (slower speed)
+  let ySpeed = 1.5; // Pixels per frame (slower speed)
+  
+  function animate() {
+    if (!document.body.contains(screensaver)) return;
+    
+    x += xSpeed;
+    y += ySpeed;
+    
+    // Bounce off edges
+    if (x + textEl.offsetWidth >= window.innerWidth || x <= 0) {
+      xSpeed = -xSpeed;
+      x = Math.max(0, Math.min(x, window.innerWidth - textEl.offsetWidth));
+    }
+    if (y + textEl.offsetHeight >= window.innerHeight || y <= 0) {
+      ySpeed = -ySpeed;
+      y = Math.max(0, Math.min(y, window.innerHeight - textEl.offsetHeight));
+    }
+    
+    textEl.style.left = x + 'px';
+    textEl.style.top = y + 'px';
+    
+    requestAnimationFrame(animate);
+  }
+  
+  animate();
+  
+  // Rotate content every 60 seconds
   const rotateInterval = setInterval(() => {
     currentIndex = (currentIndex + 1) % allContent.length;
     const textEl = document.getElementById('screensaverText');
     if (textEl) {
-      textEl.style.animation = 'none';
+      // Fade out
+      textEl.style.opacity = '0';
+      textEl.style.transition = 'opacity 0.5s';
+      
       setTimeout(() => {
         textEl.textContent = allContent[currentIndex].text;
         textEl.className = allContent[currentIndex].type === 'verse' ? 'screensaver-content verse' : 'screensaver-content';
-        textEl.style.animation = 'floatAround 20s infinite ease-in-out';
-      }, 50);
+        
+        // Reset position to random location
+        x = Math.random() * (window.innerWidth - textEl.offsetWidth);
+        y = Math.random() * (window.innerHeight - textEl.offsetHeight);
+        textEl.style.left = x + 'px';
+        textEl.style.top = y + 'px';
+        
+        // Fade in
+        textEl.style.opacity = '1';
+      }, 500);
     }
-  }, 15000);
+  }, 60000); // 60 seconds
   
   // Click to exit
   screensaver.onclick = () => {
@@ -3236,7 +3277,6 @@ function startScreensaver() {
     }
   };
 }
-
 const app = {
   CONFIG: null,
   state: null,
