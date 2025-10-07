@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.7.1
+Version: V0.7.2
 Last Updated: October 7, 2025 at 10:45 AM
 -->
 <html lang="en">
@@ -183,7 +183,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.7.1';
+const APP_VERSION = 'V0.7.2';
 
 const SCREENSAVER_CONTENT = {
   verses: [
@@ -2559,23 +2559,19 @@ function createGoalRow(goal, person) {
   } else {
     trackingText = `${(goal.taskIds || []).length} tasks`;
   }
-  
-row.innerHTML = `
-  <input type="text" data-field="timeManual" placeholder="Time (e.g., 6:07 AM)" value="${t.time ? timeString12(t.time) : ''}"/>
-  <input type="text" placeholder="Task label" value="${escapeHtml(t.label || '')}" data-field="label"/>
-  <select data-field="frequency">
-    <option value="daily" ${(t.frequency || 'daily') === 'daily' ? 'selected' : ''}>Daily</option>
-    <option value="everyother" ${t.frequency === 'everyother' ? 'selected' : ''}>Every Other Day</option>
-    <option value="weekdays" ${t.frequency === 'weekdays' ? 'selected' : ''}>Weekdays</option>
-    <option value="weekends" ${t.frequency === 'weekends' ? 'selected' : ''}>Weekends</option>
+
+	row.innerHTML = `
+  <input type="text" placeholder="Goal name" value="${escapeHtml(goal.name || '')}" data-field="goalName" style="grid-column:1/-1;margin-bottom:8px"/>
+  <select data-field="goalType" style="grid-column:1">
+    <option value="streak" ${goal.type === 'streak' ? 'selected' : ''}>Streak</option>
+    <option value="total" ${goal.type === 'total' ? 'selected' : ''}>Total</option>
   </select>
-  <label style="display:flex;align-items:center;gap:4px;white-space:nowrap">
-    <input type="checkbox" data-field="optional" ${t.optional ? 'checked' : ''}/>
-    <span style="font-size:11px">Optional</span>
-  </label>
-  <button class="btn small" data-action="removeTask">Remove</button>
+  <button class="btn small ghost" data-action="selectTasks" style="grid-column:2">${trackingText}</button>
+  <input type="number" placeholder="Target" value="${goal.target || ''}" data-field="goalTarget" min="1" style="grid-column:3;width:100px"/>
+  <button class="btn small" data-action="removeGoal" style="grid-column:5">Remove</button>
+  <div class="task-selector hidden" data-field="taskSelector" style="grid-column:1/-1"></div>
 `;
-  
+	
   const selector = row.querySelector('[data-field="taskSelector"]');
   const selectBtn = row.querySelector('[data-action="selectTasks"]');
   
@@ -2829,17 +2825,21 @@ function createTaskRow(t) {
   row.className = 'task-row';
   row.dataset.taskId = t.id || uid('t');
   
-  row.innerHTML = `
-    <input type="text" data-field="timeManual" placeholder="Time (e.g., 6:07 AM)" value="${t.time ? timeString12(t.time) : ''}"/>
-    <input type="text" placeholder="Task label" value="${escapeHtml(t.label || '')}" data-field="label"/>
-    <select data-field="frequency">
-      <option value="daily" ${(t.frequency || 'daily') === 'daily' ? 'selected' : ''}>Daily</option>
-      <option value="everyother" ${t.frequency === 'everyother' ? 'selected' : ''}>Every Other Day</option>
-      <option value="weekdays" ${t.frequency === 'weekdays' ? 'selected' : ''}>Weekdays</option>
-      <option value="weekends" ${t.frequency === 'weekends' ? 'selected' : ''}>Weekends</option>
-    </select>
-    <button class="btn small" data-action="removeTask">Remove</button>
-  `;
+row.innerHTML = `
+  <input type="text" data-field="timeManual" placeholder="Time (e.g., 6:07 AM)" value="${t.time ? timeString12(t.time) : ''}"/>
+  <input type="text" placeholder="Task label" value="${escapeHtml(t.label || '')}" data-field="label"/>
+  <select data-field="frequency">
+    <option value="daily" ${(t.frequency || 'daily') === 'daily' ? 'selected' : ''}>Daily</option>
+    <option value="everyother" ${t.frequency === 'everyother' ? 'selected' : ''}>Every Other Day</option>
+    <option value="weekdays" ${t.frequency === 'weekdays' ? 'selected' : ''}>Weekdays</option>
+    <option value="weekends" ${t.frequency === 'weekends' ? 'selected' : ''}>Weekends</option>
+  </select>
+  <label style="display:flex;align-items:center;gap:4px;white-space:nowrap">
+    <input type="checkbox" data-field="optional" ${t.optional ? 'checked' : ''}/>
+    <span style="font-size:11px">Optional</span>
+  </label>
+  <button class="btn small" data-action="removeTask">Remove</button>
+`;
   
   row.querySelector('[data-action="removeTask"]').onclick = async () => {
     const taskLabel = row.querySelector('input[data-field="label"]').value.trim() || 'this task';
