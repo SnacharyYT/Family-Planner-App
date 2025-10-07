@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.7.2
+Version: V0.7.3
 Last Updated: October 7, 2025 at 10:45 AM
 -->
 <html lang="en">
@@ -183,7 +183,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.7.2';
+const APP_VERSION = 'V0.7.3';
 
 const SCREENSAVER_CONTENT = {
   verses: [
@@ -1260,6 +1260,7 @@ async function renderDashboard() {
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">
         ${app.PEOPLE.map(p => {
          // Calculate completion excluding skipped and optional tasks
+const todaysTasks = (p.tasks || []).filter(t => shouldShowTaskToday(t));
 const nonSkippedTasks = todaysTasks.filter(t => !isSkipped(p.id, t.id) && !t.optional);
 const total = nonSkippedTasks.length;
 const done = nonSkippedTasks.filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
