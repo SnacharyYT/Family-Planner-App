@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.6.3
+Version: V0.7.1
 Last Updated: October 7, 2025 at 10:45 AM
 -->
 <html lang="en">
@@ -61,7 +61,7 @@ input[type=text],input[type=time],input[type=number],select,input[type=password]
 .member-card:nth-child(odd){background:rgba(96,165,250,.05)}
 .member-card:nth-child(even){background:rgba(52,211,153,.05)}
 .settings-section{background:rgba(0,0,0,.15);border-radius:12px;padding:16px;margin-top:16px;border:1px solid rgba(148,163,184,.1)}
-.task-row{display:grid;grid-template-columns:160px 1fr auto;gap:8px;margin-top:8px;align-items:center}
+.task-row{display:grid;grid-template-columns:160px 1fr auto auto auto;gap:8px;margin-top:8px;align-items:center}
 .goal-row{display:grid;grid-template-columns:1fr 120px 100px 80px auto;gap:8px;margin-top:8px;align-items:start}
 .goal-section{background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:12px;padding:12px;margin-bottom:12px}
 .goal-badge{background:rgba(251,191,36,.15);color:#fbbf24;border:1px solid rgba(251,191,36,.3);padding:4px 8px;border-radius:6px;font-size:11px;font-weight:600;display:inline-block}
@@ -183,7 +183,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.6.3';
+const APP_VERSION = 'V0.7.1';
 
 const SCREENSAVER_CONTENT = {
   verses: [
@@ -510,13 +510,13 @@ function stampFor(date) {
 }
 
 function getPetState(completionPct, person, nowMins) {
-  // Check for incomplete tasks first (highest priority) - excluding skipped
-  if (person && person.tasks) {
-    const hasIncomplete = person.tasks.some(t => {
-      if (isSkipped(person.id, t.id)) return false; // Exclude skipped tasks
-      const tm = getTaskTime(t);
-      return tm && nowMins >= minutesOf(tm) + 30 && !isChecked(person.id, t.id) && !isOverdueCompleted(person.id, t.id);
-    });
+// Check for incomplete tasks first (highest priority) - excluding skipped and optional
+if (person && person.tasks) {
+  const hasIncomplete = person.tasks.some(t => {
+    if (isSkipped(person.id, t.id) || t.optional) return false; // Exclude skipped and optional tasks
+    const tm = getTaskTime(t);
+    return tm && nowMins >= minutesOf(tm) + 30 && !isChecked(person.id, t.id) && !isOverdueCompleted(person.id, t.id);
+  });
     if (hasIncomplete) {
       return {emoji: '😄', state: 'needs attention', color: '#ef4444', indicator: '💢'};
     }
@@ -1198,8 +1198,10 @@ function overallCounts() {
     if (!p.tasks || !Array.isArray(p.tasks)) {
       p.tasks = [];
     }
-    total += p.tasks.length;
-    done += p.tasks.filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
+    // Exclude optional tasks from metrics
+    const requiredTasks = p.tasks.filter(t => !t.optional);
+    total += requiredTasks.length;
+    done += requiredTasks.filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
   });
   const pct = total ? (done / total * 100) : 0;
   return {done, total, pct};
@@ -1257,10 +1259,10 @@ async function renderDashboard() {
       <h3 style="margin:16px 0 12px 0">Family Pet Status</h3>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">
         ${app.PEOPLE.map(p => {
-          // Calculate completion excluding skipped tasks to match main page
-          const nonSkippedTasks = (p.tasks || []).filter(t => !isSkipped(p.id, t.id));
-          const total = nonSkippedTasks.length;
-          const done = nonSkippedTasks.filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
+         // Calculate completion excluding skipped and optional tasks
+const nonSkippedTasks = todaysTasks.filter(t => !isSkipped(p.id, t.id) && !t.optional);
+const total = nonSkippedTasks.length;
+const done = nonSkippedTasks.filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
           const pct = total > 0 ? Math.round((done / total) * 100) : 100;
           const nowM = nowMinutes();
           const pet = getPetState(pct, p, nowM);
@@ -1971,10 +1973,10 @@ async function openDetail(personId) {
   
   // Remove auto-skip logic - just render current state
   
-  // Calculate completion excluding skipped tasks
-  const nonSkippedTasks = p.tasks.filter(t => !isSkipped(p.id, t.id));
-  const total = nonSkippedTasks.length;
-  const done = nonSkippedTasks.filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
+// Calculate completion excluding skipped and optional tasks
+const nonSkippedTasks = p.tasks.filter(t => !isSkipped(p.id, t.id) && !t.optional);
+const total = nonSkippedTasks.length;
+const done = nonSkippedTasks.filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
   const pct = total > 0 ? Math.round((done / total) * 100) : 100;
   const overdueDone = overdueCompletedCountForPerson(p);
   
@@ -2114,33 +2116,36 @@ async function openDetail(personId) {
     `;
     
     groups[when].forEach(t => {
-      const row = document.createElement('div');
-      row.className = 'task';
-      const tt = getTaskTime(t);
-      const timeStr = tt ? (timeString12(tt) + ' – ') : '';
-      const chk = isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id);
-      const sk = isSkipped(p.id, t.id);
-      
-      const trackedGoals = (p.goals || []).filter(goal => {
-        if (goal.trackAll) return true;
-        if (goal.trackPeriod && goal.trackPeriod === t.when) return true;
-        if (goal.taskIds && goal.taskIds.includes(t.id)) return true;
-        return false;
-      });
-      const goalBadges = trackedGoals.map(g => 
-        `<span class="goal-badge" style="font-size:10px;padding:2px 6px;margin-left:4px" title="Tracked by: ${escapeHtml(g.name)}">🎯 ${escapeHtml(g.name)}</span>`
-      ).join('');
-      
-      row.innerHTML = `
-        <label class="row" style="flex:1;align-items:flex-start">
-          <input type="checkbox" ${chk ? 'checked' : ''}>
-          <div class="label">
-            ${timeStr}${escapeHtml(stripLeadingTime(t.label))}
-            ${goalBadges}
-            <div class="when">${when}</div>
-          </div>
-        </label>
-      `;
+  const row = document.createElement('div');
+  row.className = 'task';
+  const tt = getTaskTime(t);
+  const timeStr = tt ? (timeString12(tt) + ' – ') : '';
+  const chk = isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id);
+  const sk = isSkipped(p.id, t.id);
+  
+  const trackedGoals = (p.goals || []).filter(goal => {
+    if (goal.trackAll) return true;
+    if (goal.trackPeriod && goal.trackPeriod === t.when) return true;
+    if (goal.taskIds && goal.taskIds.includes(t.id)) return true;
+    return false;
+  });
+  const goalBadges = trackedGoals.map(g => 
+    `<span class="goal-badge" style="font-size:10px;padding:2px 6px;margin-left:4px" title="Tracked by: ${escapeHtml(g.name)}">🎯 ${escapeHtml(g.name)}</span>`
+  ).join('');
+  
+  const optionalBadge = t.optional ? '<span class="goal-badge" style="font-size:10px;padding:2px 6px;margin-left:4px;background:rgba(148,163,184,.15);color:var(--muted);border-color:rgba(148,163,184,.3)">Optional</span>' : '';
+  
+  row.innerHTML = `
+    <label class="row" style="flex:1;align-items:flex-start">
+      <input type="checkbox" ${chk ? 'checked' : ''}>
+      <div class="label">
+        ${timeStr}${escapeHtml(stripLeadingTime(t.label))}
+        ${optionalBadge}
+        ${goalBadges}
+        <div class="when">${when}</div>
+      </div>
+    </label>
+  `;
       
       if (trackedGoals.length > 0) {
         row.style.borderLeft = '3px solid #fbbf24';
@@ -2555,17 +2560,21 @@ function createGoalRow(goal, person) {
     trackingText = `${(goal.taskIds || []).length} tasks`;
   }
   
-  row.innerHTML = `
-    <input type="text" placeholder="Goal name" value="${escapeHtml(goal.name || '')}" data-field="goalName" style="grid-column:1/-1;margin-bottom:8px"/>
-    <select data-field="goalType" style="grid-column:1">
-      <option value="streak" ${goal.type === 'streak' ? 'selected' : ''}>Streak</option>
-      <option value="total" ${goal.type === 'total' ? 'selected' : ''}>Total</option>
-    </select>
-    <button class="btn small ghost" data-action="selectTasks" style="grid-column:2">${trackingText}</button>
-    <input type="number" placeholder="Target" value="${goal.target || ''}" data-field="goalTarget" min="1" style="grid-column:3;width:100px"/>
-    <button class="btn small" data-action="removeGoal" style="grid-column:5">Remove</button>
-    <div class="task-selector hidden" data-field="taskSelector" style="grid-column:1/-1"></div>
-  `;
+row.innerHTML = `
+  <input type="text" data-field="timeManual" placeholder="Time (e.g., 6:07 AM)" value="${t.time ? timeString12(t.time) : ''}"/>
+  <input type="text" placeholder="Task label" value="${escapeHtml(t.label || '')}" data-field="label"/>
+  <select data-field="frequency">
+    <option value="daily" ${(t.frequency || 'daily') === 'daily' ? 'selected' : ''}>Daily</option>
+    <option value="everyother" ${t.frequency === 'everyother' ? 'selected' : ''}>Every Other Day</option>
+    <option value="weekdays" ${t.frequency === 'weekdays' ? 'selected' : ''}>Weekdays</option>
+    <option value="weekends" ${t.frequency === 'weekends' ? 'selected' : ''}>Weekends</option>
+  </select>
+  <label style="display:flex;align-items:center;gap:4px;white-space:nowrap">
+    <input type="checkbox" data-field="optional" ${t.optional ? 'checked' : ''}/>
+    <span style="font-size:11px">Optional</span>
+  </label>
+  <button class="btn small" data-action="removeTask">Remove</button>
+`;
   
   const selector = row.querySelector('[data-field="taskSelector"]');
   const selectBtn = row.querySelector('[data-action="selectTasks"]');
@@ -3030,18 +3039,19 @@ async function saveEditor() {
       }
     });
     
-    const tasks = [];
-    card.querySelectorAll('.task-row').forEach(tr => {
-      const label = tr.querySelector('input[data-field="label"]').value.trim();
-      const manual = tr.querySelector('input[data-field="timeManual"]').value;
-      const frequency = tr.querySelector('select[data-field="frequency"]').value;
-      const time = parseTimeFlexible(manual);
-      const when = determineTaskPeriod(time);
-      
-      if (label) {
-        tasks.push({id: tr.dataset.taskId || uid('t'), label, when, time, frequency: frequency || 'daily'});
-      }
-    });
+const tasks = [];
+card.querySelectorAll('.task-row').forEach(tr => {
+  const label = tr.querySelector('input[data-field="label"]').value.trim();
+  const manual = tr.querySelector('input[data-field="timeManual"]').value;
+  const frequency = tr.querySelector('select[data-field="frequency"]').value;
+  const optional = tr.querySelector('input[data-field="optional"]').checked;
+  const time = parseTimeFlexible(manual);
+  const when = determineTaskPeriod(time);
+  
+  if (label) {
+    tasks.push({id: tr.dataset.taskId || uid('t'), label, when, time, frequency: frequency || 'daily', optional: optional || false});
+  }
+});
     
     tasks.sort((a, b) => {
       if (a.time && b.time) return minutesOf(a.time) - minutesOf(b.time);
@@ -3217,8 +3227,8 @@ function startScreensaver() {
   let x = Math.random() * (window.innerWidth - textEl.offsetWidth);
   let y = Math.random() * (window.innerHeight - textEl.offsetHeight);
   textEl.style.width = textEl.offsetWidth + 'px';
-  let xSpeed = 0.8; // Pixels per frame (slower speed)
-  let ySpeed = 0.8; // Pixels per frame (slower speed)
+  let xSpeed = 0.2; // Pixels per frame (slower speed)
+  let ySpeed = 0.2; // Pixels per frame (slower speed)
   
   function animate() {
     if (!document.body.contains(screensaver)) return;
