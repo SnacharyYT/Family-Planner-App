@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.6.2
+Version: V0.6.3
 Last Updated: October 7, 2025 at 10:45 AM
 -->
 <html lang="en">
@@ -183,7 +183,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.6.2';
+const APP_VERSION = 'V0.6.3';
 
 const SCREENSAVER_CONTENT = {
   verses: [
@@ -3216,8 +3216,9 @@ function startScreensaver() {
   const textEl = document.getElementById('screensaverText');
   let x = Math.random() * (window.innerWidth - textEl.offsetWidth);
   let y = Math.random() * (window.innerHeight - textEl.offsetHeight);
-  let xSpeed = 1.5; // Pixels per frame (slower speed)
-  let ySpeed = 1.5; // Pixels per frame (slower speed)
+  textEl.style.width = textEl.offsetWidth + 'px';
+  let xSpeed = 0.8; // Pixels per frame (slower speed)
+  let ySpeed = 0.8; // Pixels per frame (slower speed)
   
   function animate() {
     if (!document.body.contains(screensaver)) return;
