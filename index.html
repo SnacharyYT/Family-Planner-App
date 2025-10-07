@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.7.3
+Version: V0.7.4
 Last Updated: October 7, 2025 at 10:45 AM
 -->
 <html lang="en">
@@ -183,7 +183,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.7.3';
+const APP_VERSION = 'V0.7.4';
 
 const SCREENSAVER_CONTENT = {
   verses: [
@@ -1767,13 +1767,15 @@ async function getHistoricalData(days) {
         let total = 0, done = 0;
         const people = {};
         
-        app.PEOPLE.forEach(p => {
-          const pTotal = (p.tasks || []).length;
-          const pDone = (p.tasks || []).filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
-          total += pTotal;
-          done += pDone;
-          people[p.id] = {total: pTotal, done: pDone};
-        });
+   app.PEOPLE.forEach(p => {
+  // Exclude optional tasks from historical tracking
+  const requiredTasks = (p.tasks || []).filter(t => !t.optional);
+  const pTotal = requiredTasks.length;
+  const pDone = requiredTasks.filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
+  total += pTotal;
+  done += pDone;
+  people[p.id] = {total: pTotal, done: pDone};
+});
         
         result.push({date: dateStr, total, done, people});
       } else {
@@ -1795,13 +1797,15 @@ async function saveHistoricalSnapshot() {
   let total = 0, done = 0;
   const people = {};
   
-  app.PEOPLE.forEach(p => {
-    const pTotal = (p.tasks || []).length;
-    const pDone = (p.tasks || []).filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
-    total += pTotal;
-    done += pDone;
-    people[p.id] = {total: pTotal, done: pDone};
-  });
+app.PEOPLE.forEach(p => {
+  // Exclude optional tasks from historical tracking
+  const requiredTasks = (p.tasks || []).filter(t => !t.optional);
+  const pTotal = requiredTasks.length;
+  const pDone = requiredTasks.filter(t => isChecked(p.id, t.id) || isOverdueCompleted(p.id, t.id)).length;
+  total += pTotal;
+  done += pDone;
+  people[p.id] = {total: pTotal, done: pDone};
+});
   
   try {
     const snapshot = await get(ref(database, 'history'));
