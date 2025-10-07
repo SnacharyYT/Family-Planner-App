@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.7.4
+Version: V0.7.5
 Last Updated: October 7, 2025 at 10:45 AM
 -->
 <html lang="en">
@@ -183,7 +183,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.7.4';
+const APP_VERSION = 'V0.7.5';
 
 const SCREENSAVER_CONTENT = {
   verses: [
@@ -1480,47 +1480,68 @@ window.showForgiveOptions = function(personId) {
     
     <h4 style="margin:0 0 12px 0">${escapeHtml(person.name)}'s Issues</h4>
     
-    <div style="margin-bottom:16px">
-      <button class="btn" style="width:100%" onclick="forgiveAll('${person.id}')">
-        Forgive All (${allProblems.length} tasks)
+<div style="margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+  <button class="btn ghost" style="width:100%" onclick="markAllOnTime('${person.id}')">
+    Mark All On-Time
+  </button>
+  <button class="btn" style="width:100%" onclick="forgiveAll('${person.id}')">
+    Skip All
+  </button>
+</div>
+    
+<div style="border-top:1px solid var(--outline);padding-top:16px;margin-top:16px">
+  <h5 style="margin:0 0 12px 0">By Time Period</h5>
+  ${groupedByPeriod.morning.length > 0 ? `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <button class="btn ghost" style="width:100%" onclick="markPeriodOnTime('${person.id}', 'morning')">
+        Morning On-Time (${groupedByPeriod.morning.length})
+      </button>
+      <button class="btn ghost" style="width:100%" onclick="forgivePeriod('${person.id}', 'morning')">
+        Morning Skip (${groupedByPeriod.morning.length})
       </button>
     </div>
+  ` : ''}
+  ${groupedByPeriod.afternoon.length > 0 ? `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <button class="btn ghost" style="width:100%" onclick="markPeriodOnTime('${person.id}', 'afternoon')">
+        Afternoon On-Time (${groupedByPeriod.afternoon.length})
+      </button>
+      <button class="btn ghost" style="width:100%" onclick="forgivePeriod('${person.id}', 'afternoon')">
+        Afternoon Skip (${groupedByPeriod.afternoon.length})
+      </button>
+    </div>
+  ` : ''}
+  ${groupedByPeriod.evening.length > 0 ? `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <button class="btn ghost" style="width:100%" onclick="markPeriodOnTime('${person.id}', 'evening')">
+        Evening On-Time (${groupedByPeriod.evening.length})
+      </button>
+      <button class="btn ghost" style="width:100%" onclick="forgivePeriod('${person.id}', 'evening')">
+        Evening Skip (${groupedByPeriod.evening.length})
+      </button>
+    </div>
+  ` : ''}
+</div>
     
     <div style="border-top:1px solid var(--outline);padding-top:16px;margin-top:16px">
-      <h5 style="margin:0 0 12px 0">Forgive by Period</h5>
-      ${groupedByPeriod.morning.length > 0 ? `
-        <button class="btn ghost" style="width:100%;margin-bottom:8px" onclick="forgivePeriod('${person.id}', 'morning')">
-          Morning (${groupedByPeriod.morning.length} tasks)
-        </button>
-      ` : ''}
-      ${groupedByPeriod.afternoon.length > 0 ? `
-        <button class="btn ghost" style="width:100%;margin-bottom:8px" onclick="forgivePeriod('${person.id}', 'afternoon')">
-          Afternoon (${groupedByPeriod.afternoon.length} tasks)
-        </button>
-      ` : ''}
-      ${groupedByPeriod.evening.length > 0 ? `
-        <button class="btn ghost" style="width:100%;margin-bottom:8px" onclick="forgivePeriod('${person.id}', 'evening')">
-          Evening (${groupedByPeriod.evening.length} tasks)
-        </button>
-      ` : ''}
-    </div>
-    
-    <div style="border-top:1px solid var(--outline);padding-top:16px;margin-top:16px">
-      <h5 style="margin:0 0 12px 0">Forgive Individual Tasks</h5>
-      ${allProblems.map(task => {
-        const isOverdue = isOverdueCompleted(person.id, task.id);
-        const badge = isOverdue ? '⚠️ Overdue' : '❌ Incomplete';
-        return `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid var(--outline);border-radius:8px;margin-bottom:8px">
-            <div style="flex:1">
-              <div style="font-size:14px">${escapeHtml(stripLeadingTime(task.label))}</div>
-              <div class="muted" style="font-size:11px">${badge}</div>
-            </div>
-            <button class="btn small" onclick="forgiveTask('${person.id}', '${task.id}')">Forgive</button>
-          </div>
-        `;
-      }).join('')}
-    </div>
+  <h5 style="margin:0 0 12px 0">Forgive Individual Tasks</h5>
+  ${allProblems.map(task => {
+    const isOverdue = isOverdueCompleted(person.id, task.id);
+    const badge = isOverdue ? '⚠️ Overdue' : '❌ Incomplete';
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid var(--outline);border-radius:8px;margin-bottom:8px">
+        <div style="flex:1">
+          <div style="font-size:14px">${escapeHtml(stripLeadingTime(task.label))}</div>
+          <div class="muted" style="font-size:11px">${badge}</div>
+        </div>
+        <div class="row" style="gap:4px">
+          <button class="btn small ghost" onclick="markOnTime('${person.id}', '${task.id}')">Mark On-Time</button>
+          <button class="btn small" onclick="forgiveTask('${person.id}', '${task.id}')">Skip</button>
+        </div>
+      </div>
+    `;
+  }).join('')}
+</div>
   `;
 };
 
@@ -1574,6 +1595,78 @@ window.forgivePeriod = async function(personId, period) {
 window.forgiveTask = async function(personId, taskId) {
   await setSkipped(personId, taskId, true);
   showForgiveOptions(personId);
+};
+
+window.markOnTime = async function(personId, taskId) {
+  const person = app.PEOPLE.find(p => p.id === personId);
+  if (!person) return;
+  
+  const task = person.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  
+  // Mark as checked (on-time completion)
+  const k = key(personId, taskId);
+  app.state.checked[k] = true;
+  delete app.state.overdueCompleted[k];
+  delete app.state.skipped[k];
+  
+  await saveState(app.state);
+  showForgiveOptions(personId);
+};
+
+window.markAllOnTime = async function(personId) {
+  if (!await confirmDialog('Mark all overdue and incomplete tasks as completed on-time?')) return;
+  
+  const person = app.PEOPLE.find(p => p.id === personId);
+  if (!person) return;
+  
+  const nowM = nowMinutes();
+  const allProblems = (person.tasks || []).filter(t => {
+    return isOverdueCompleted(person.id, t.id) || 
+      (() => {
+        const tm = getTaskTime(t);
+        return tm && nowM >= minutesOf(tm) + 30 && !isChecked(person.id, t.id) && !isOverdueCompleted(person.id, t.id) && !isSkipped(person.id, t.id);
+      })();
+  });
+  
+  for (const task of allProblems) {
+    const k = key(person.id, task.id);
+    app.state.checked[k] = true;
+    delete app.state.overdueCompleted[k];
+    delete app.state.skipped[k];
+  }
+  
+  await saveState(app.state);
+  window.currentForgivenessOverlay.remove();
+  renderDashboard();
+};
+
+window.markPeriodOnTime = async function(personId, period) {
+  if (!await confirmDialog(`Mark all ${period} tasks as completed on-time?`)) return;
+  
+  const person = app.PEOPLE.find(p => p.id === personId);
+  if (!person) return;
+  
+  const nowM = nowMinutes();
+  const periodTasks = (person.tasks || []).filter(t => {
+    if (t.when !== period) return false;
+    return isOverdueCompleted(person.id, t.id) || 
+      (() => {
+        const tm = getTaskTime(t);
+        return tm && nowM >= minutesOf(tm) + 30 && !isChecked(person.id, t.id) && !isOverdueCompleted(person.id, t.id) && !isSkipped(person.id, t.id);
+      })();
+  });
+  
+  for (const task of periodTasks) {
+    const k = key(person.id, task.id);
+    app.state.checked[k] = true;
+    delete app.state.overdueCompleted[k];
+    delete app.state.skipped[k];
+  }
+  
+  await saveState(app.state);
+  window.currentForgivenessOverlay.remove();
+  renderDashboard();
 };
 
 function showTaskDetails(personId) {
