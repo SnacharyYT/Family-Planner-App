@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.7.7
-Last Updated: October 8, 2025 at 1:45 PM
+Version: V0.7.9
+Last Updated: October 8, 2025 at 2:30 PM
 -->
 <html lang="en">
 <head>
@@ -90,6 +90,7 @@ input[type=text],input[type=time],input[type=number],select,input[type=password]
 .screensaver-content{position:absolute;font-size:32px;color:#fff;text-align:center;padding:40px;max-width:80%;line-height:1.6;text-shadow:2px 2px 4px rgba(0,0,0,0.5)}
 .screensaver-content.verse{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:36px;line-height:1.8}
 .screensaver-hint{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.3);font-size:14px}
+.screensaver-datetime{position:absolute;top:20px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.3);font-size:18px;white-space:nowrap}
 .modal-backdrop{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:1000}
 .modal{background:#111827;border:1px solid var(--outline);border-radius:16px;padding:20px;max-width:400px;width:90%}
 .modal-body{margin-bottom:16px;font-size:14px}
@@ -183,7 +184,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.7.7';
+const APP_VERSION = 'V0.7.9';
 
 const SCREENSAVER_CONTENT = {
   verses: [
@@ -512,58 +513,79 @@ function stampFor(date) {
 }
 
 function getPetState(completionPct, person, nowMins) {
-// Check for incomplete tasks first (highest priority) - excluding skipped and optional
-// Only trigger "needs attention" for tasks in the current or upcoming time periods
-if (person && person.tasks) {
-  const morningEndMins = minutesOf(app.CONFIG.morningEnd || {h: 12, m: 0});
-  const afternoonEndMins = minutesOf(app.CONFIG.afternoonEnd || {h: 17, m: 0});
-  
-  const hasIncomplete = person.tasks.some(t => {
-    if (isSkipped(person.id, t.id) || t.optional) return false; // Exclude skipped and optional tasks
-    const tm = getTaskTime(t);
-    if (!tm) return false;
+  // Calculate completion based only on tasks that are due (not future tasks)
+  if (person && person.tasks) {
+    const dueTasks = person.tasks.filter(t => {
+      if (isSkipped(person.id, t.id) || t.optional) return false;
+      if (!shouldShowTaskToday(t)) return false;
+      const tm = getTaskTime(t);
+      if (!tm) return false;
+      // Task is due if its scheduled time has passed
+      return nowMins >= minutesOf(tm);
+    });
     
-    const isOverdue = nowMins >= minutesOf(tm) + 30;
-    const isNotCompleted = !isChecked(person.id, t.id) && !isOverdueCompleted(person.id, t.id);
+    const dueCompleted = dueTasks.filter(t => isChecked(person.id, t.id) || isOverdueCompleted(person.id, t.id)).length;
+    const dueTotal = dueTasks.length;
     
-    if (!isOverdue || !isNotCompleted) return false;
+    // Recalculate completion percentage based only on due tasks
+    const actualCompletionPct = dueTotal > 0 ? Math.round((dueCompleted / dueTotal) * 100) : 100;
     
-   // Only show "needs attention" if the task's time period hasn't fully passed
-const morningStartMins = minutesOf(app.CONFIG.morningStart || {h: 6, m: 0});
-const eveningStartMins = minutesOf(app.CONFIG.eveningStart || {h: 17, m: 0});
-const bedtimeStartMins = minutesOf(app.CONFIG.bedtimeStart || {h: 21, m: 0});
-
-if (t.when === 'morning') {
-  // Morning tasks only trigger attention if we're still in morning
-  return nowMins < morningEndMins;
-} else if (t.when === 'afternoon') {
-  // Afternoon tasks only trigger attention if we're still in afternoon
-  return nowMins < eveningStartMins;
-} else if (t.when === 'evening') {
-  // Evening tasks only trigger attention if we're still in evening
-  return nowMins < bedtimeStartMins;
-} else if (t.when === 'bedtime') {
-  // Bedtime tasks always trigger attention (until next morning)
-  return true;
-}
+    // Check for overdue incomplete tasks (highest priority)
+    const hasOverdue = dueTasks.some(t => {
+      const tm = getTaskTime(t);
+      const isOverdue = nowMins >= minutesOf(tm) + 30;
+      const isNotCompleted = !isChecked(person.id, t.id) && !isOverdueCompleted(person.id, t.id);
+      
+      if (!isOverdue || !isNotCompleted) return false;
+      
+      // Only show "needs attention" if the task's time period hasn't fully passed
+      const morningEndMins = minutesOf(app.CONFIG.morningEnd || {h: 12, m: 0});
+      const eveningStartMins = minutesOf(app.CONFIG.eveningStart || {h: 17, m: 0});
+      const bedtimeStartMins = minutesOf(app.CONFIG.bedtimeStart || {h: 21, m: 0});
+      
+      if (t.when === 'morning') {
+        return nowMins < morningEndMins;
+      } else if (t.when === 'afternoon') {
+        return nowMins < eveningStartMins;
+      } else if (t.when === 'evening') {
+        return nowMins < bedtimeStartMins;
+      } else if (t.when === 'bedtime') {
+        return true;
+      }
+      
+      return false;
+    });
     
-    return false;
-  });
-  
-  if (hasIncomplete) {
-    return {emoji: '😄', state: 'needs attention', color: '#ef4444', indicator: '💢'};
-  }
-}
-  // Check if within 30 minutes of bedtime
-  if (person && person.bedTime) {
-    const bedMins = minutesOf(person.bedTime);
-    const minsUntilBed = bedMins - nowMins;
-    if (minsUntilBed >= 0 && minsUntilBed <= 60) {
-      return {emoji: '😄', state: 'is getting tired', color: '#8b5cf6', indicator: '💤'};
+    if (hasOverdue) {
+      return {emoji: '😄', state: 'needs attention', color: '#ef4444', indicator: '💢'};
+    }
+    
+    // Check if within 60 minutes of bedtime
+    const bedtimeStart = (person.useDefaultTimes !== false) ? 
+      app.CONFIG.bedtimeStart : (person.bedtimeStart || app.CONFIG.bedtimeStart);
+    
+    if (bedtimeStart) {
+      const bedMins = minutesOf(bedtimeStart);
+      const minsUntilBed = bedMins - nowMins;
+      if (minsUntilBed >= 0 && minsUntilBed <= 60) {
+        return {emoji: '😄', state: 'is getting tired', color: '#8b5cf6', indicator: '💤'};
+      }
+    }
+    
+    // Use actual completion percentage for mood (only due tasks)
+    if (actualCompletionPct >= 71) {
+      return {emoji: '😄', state: 'is feeling amazing', color: '#22c55e', indicator: '✨'};
+    } else if (actualCompletionPct >= 41) {
+      return {emoji: '🙂', state: 'is happy', color: '#f59e0b', indicator: '❤️'};
+    } else if (dueTotal === 0) {
+      // No tasks due yet - pet is content
+      return {emoji: '😊', state: 'is relaxing', color: '#60a5fa', indicator: '☀️'};
+    } else {
+      return {emoji: '😴', state: 'isn\'t feeling good', color: '#94a3b8', indicator: '😢'};
     }
   }
   
-  // Use completion percentage for other states (excluding skipped tasks from calculation)
+  // Fallback if no person data
   if (completionPct >= 71) {
     return {emoji: '😄', state: 'is feeling amazing', color: '#22c55e', indicator: '✨'};
   } else if (completionPct >= 41) {
@@ -572,7 +594,6 @@ if (t.when === 'morning') {
     return {emoji: '😴', state: 'isn\'t feeling good', color: '#94a3b8', indicator: '😢'};
   }
 }
-
 function getDateStamp(date = new Date()) {
   return date.getFullYear() + '-' + (date.getMonth() + 1) + '-' + date.getDate();
 }
@@ -3370,16 +3391,53 @@ function startScreensaver() {
   const screensaver = document.createElement('div');
   screensaver.className = 'screensaver';
   
+  // Helper function to format date/time
+  function formatScreensaverDateTime() {
+    const now = new Date();
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    
+    const dayName = days[now.getDay()];
+    const monthName = months[now.getMonth()];
+    const date = now.getDate();
+    
+    // Add ordinal suffix
+    let suffix = 'th';
+    if (date === 1 || date === 21 || date === 31) suffix = 'st';
+    else if (date === 2 || date === 22) suffix = 'nd';
+    else if (date === 3 || date === 23) suffix = 'rd';
+    
+    let hours = now.getHours();
+    const minutes = now.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    
+    return `${dayName}, ${monthName} ${date}${suffix}, ${hours}:${pad2(minutes)}${ampm}`;
+  }
+  
   const contentClass = allContent[currentIndex].type === 'verse' ? 'screensaver-content verse' : 'screensaver-content';
   screensaver.innerHTML = `
+    <div class="screensaver-datetime" id="screensaverDateTime">${formatScreensaverDateTime()}</div>
     <div class="${contentClass}" id="screensaverText">${escapeHtml(allContent[currentIndex].text)}</div>
     <div class="screensaver-hint">Tap anywhere to exit</div>
   `;
   
   document.body.appendChild(screensaver);
   
+  // Update date/time every second
+  const dateTimeEl = document.getElementById('screensaverDateTime');
+  const dateTimeInterval = setInterval(() => {
+    if (document.body.contains(screensaver)) {
+      dateTimeEl.textContent = formatScreensaverDateTime();
+    } else {
+      clearInterval(dateTimeInterval);
+    }
+  }, 1000);
+  
   // DVD-style bouncing animation
   const textEl = document.getElementById('screensaverText');
+  const hintEl = screensaver.querySelector('.screensaver-hint');
+  
   let x = Math.random() * (window.innerWidth - textEl.offsetWidth);
   let y = Math.random() * (window.innerHeight - textEl.offsetHeight);
   textEl.style.width = textEl.offsetWidth + 'px';
@@ -3391,6 +3449,49 @@ function startScreensaver() {
     
     x += xSpeed;
     y += ySpeed;
+    
+    // Get bounding boxes for collision detection
+    const textRect = {
+      left: x,
+      right: x + textEl.offsetWidth,
+      top: y,
+      bottom: y + textEl.offsetHeight
+    };
+    
+    const dateTimeRect = dateTimeEl.getBoundingClientRect();
+    const hintRect = hintEl.getBoundingClientRect();
+    
+    // Check collision with date/time at top
+    if (textRect.left < dateTimeRect.right && 
+        textRect.right > dateTimeRect.left &&
+        textRect.top < dateTimeRect.bottom &&
+        textRect.bottom > dateTimeRect.top) {
+      // Collision detected - bounce away
+      if (Math.abs(textRect.top - dateTimeRect.bottom) < 10) {
+        ySpeed = Math.abs(ySpeed); // Bounce down
+        y = dateTimeRect.bottom;
+      }
+      if (Math.abs(textRect.bottom - dateTimeRect.top) < 10) {
+        ySpeed = -Math.abs(ySpeed); // Bounce up
+        y = dateTimeRect.top - textEl.offsetHeight;
+      }
+    }
+    
+    // Check collision with hint at bottom
+    if (textRect.left < hintRect.right && 
+        textRect.right > hintRect.left &&
+        textRect.top < hintRect.bottom &&
+        textRect.bottom > hintRect.top) {
+      // Collision detected - bounce away
+      if (Math.abs(textRect.bottom - hintRect.top) < 10) {
+        ySpeed = -Math.abs(ySpeed); // Bounce up
+        y = hintRect.top - textEl.offsetHeight;
+      }
+      if (Math.abs(textRect.top - hintRect.bottom) < 10) {
+        ySpeed = Math.abs(ySpeed); // Bounce down
+        y = hintRect.bottom;
+      }
+    }
     
     // Bounce off edges
     if (x + textEl.offsetWidth >= window.innerWidth || x <= 0) {
@@ -3438,6 +3539,7 @@ function startScreensaver() {
   // Click to exit
   screensaver.onclick = () => {
     clearInterval(rotateInterval);
+    clearInterval(dateTimeInterval);
     screensaver.remove();
     if (window.resetInactivityTimer) {
       window.resetInactivityTimer();
