@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- 
 Family Checklists App
-Version: V0.7.6
-Last Updated: October 7, 2025 at 10:45 AM
+Version: V0.7.7
+Last Updated: October 8, 2025 at 1:45 PM
 -->
 <html lang="en">
 <head>
@@ -183,7 +183,7 @@ const database = getDatabase(firebaseApp);
 (function() {
 'use strict';
 
-const APP_VERSION = 'V0.7.6';
+const APP_VERSION = 'V0.7.7';
 
 const SCREENSAVER_CONTENT = {
   verses: [
@@ -276,15 +276,14 @@ const COLOR_THEMES = {
 };
 
 const DEFAULT_CONFIG = {
+  const DEFAULT_CONFIG = {
   appTitle: 'Family Checklists',
   resetHour: 21,
   colorTheme: 'blue',
+  morningStart: {h: 6, m: 0},
   morningEnd: {h: 12, m: 0},
-  afternoonEnd: {h: 17, m: 0},
-  wakeParent: {h: 6, m: 0},
-  wakeKids: {h: 6, m: 0},
-  bedtimeKids: {h: 21, m: 0},
-  bedtimeParents: {h: 21, m: 0},
+  eveningStart: {h: 17, m: 0},
+  bedtimeStart: {h: 21, m: 0},
   pinEnabled: false,
   pinHash: null,
   pinSalt: null,
@@ -471,11 +470,15 @@ function parseTimeFlexible(s) {
 function determineTaskPeriod(taskTime) {
   if (!taskTime) return 'evening';
   const taskMins = minutesOf(taskTime);
+  const morningStartMins = minutesOf(app.CONFIG.morningStart || {h: 6, m: 0});
   const morningEndMins = minutesOf(app.CONFIG.morningEnd || {h: 12, m: 0});
-  const afternoonEndMins = minutesOf(app.CONFIG.afternoonEnd || {h: 17, m: 0});
-  if (taskMins < morningEndMins) return 'morning';
-  if (taskMins < afternoonEndMins) return 'afternoon';
-  return 'evening';
+  const eveningStartMins = minutesOf(app.CONFIG.eveningStart || {h: 17, m: 0});
+  const bedtimeStartMins = minutesOf(app.CONFIG.bedtimeStart || {h: 21, m: 0});
+  
+  if (taskMins >= morningStartMins && taskMins < morningEndMins) return 'morning';
+  if (taskMins >= morningEndMins && taskMins < eveningStartMins) return 'afternoon';
+  if (taskMins >= eveningStartMins && taskMins < bedtimeStartMins) return 'evening';
+  return 'bedtime';
 }
 
 function nowMinutes() {
@@ -526,17 +529,24 @@ if (person && person.tasks) {
     
     if (!isOverdue || !isNotCompleted) return false;
     
-    // Only show "needs attention" if the task's time period hasn't fully passed
-    if (t.when === 'morning') {
-      // Morning tasks only trigger attention if we're still in morning
-      return nowMins < morningEndMins;
-    } else if (t.when === 'afternoon') {
-      // Afternoon tasks only trigger attention if we're still in afternoon or earlier
-      return nowMins < afternoonEndMins;
-    } else if (t.when === 'evening') {
-      // Evening tasks always trigger attention (until daily reset)
-      return true;
-    }
+   // Only show "needs attention" if the task's time period hasn't fully passed
+const morningStartMins = minutesOf(app.CONFIG.morningStart || {h: 6, m: 0});
+const eveningStartMins = minutesOf(app.CONFIG.eveningStart || {h: 17, m: 0});
+const bedtimeStartMins = minutesOf(app.CONFIG.bedtimeStart || {h: 21, m: 0});
+
+if (t.when === 'morning') {
+  // Morning tasks only trigger attention if we're still in morning
+  return nowMins < morningEndMins;
+} else if (t.when === 'afternoon') {
+  // Afternoon tasks only trigger attention if we're still in afternoon
+  return nowMins < eveningStartMins;
+} else if (t.when === 'evening') {
+  // Evening tasks only trigger attention if we're still in evening
+  return nowMins < bedtimeStartMins;
+} else if (t.when === 'bedtime') {
+  // Bedtime tasks always trigger attention (until next morning)
+  return true;
+}
     
     return false;
   });
@@ -2223,7 +2233,7 @@ const done = nonSkippedTasks.filter(t => isChecked(p.id, t.id) || isOverdueCompl
   const tasksWrap = document.getElementById('tasks');
   const groups = groupByWhen(p.tasks.filter(t => shouldShowTaskToday(t)));
   
-  ['morning', 'afternoon', 'evening'].forEach(when => {
+  ['morning', 'afternoon', 'evening', 'bedtime'].forEach(when => {
     if (!(groups[when] && groups[when].length)) return;
     
     const section = document.createElement('div');
@@ -2403,33 +2413,34 @@ function renderEditor() {
     </div>
     
     <div class="form-card">
-      <h2 style="margin:0 0 12px 0">Family Settings</h2>
-      <div class="form-row">
-        <div class="field">
-          <label for="familyWakeInput">Family Wake Up Time</label>
-          <input id="familyWakeInput" type="time" value="${timeVal(app.CONFIG.wakeParent) || '06:00'}"/>
-        </div>
-        <div class="field">
-          <label for="familyBedInput">Family Bedtime</label>
-          <input id="familyBedInput" type="time" value="${timeVal(app.CONFIG.bedtimeKids) || '21:00'}"/>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="field">
-          <label for="morningEndInput">Morning ends at</label>
-          <input id="morningEndInput" type="time" value="${timeVal(app.CONFIG.morningEnd) || '12:00'}"/>
-        </div>
-        <div class="field">
-          <label for="afternoonEndInput">Afternoon ends at</label>
-          <input id="afternoonEndInput" type="time" value="${timeVal(app.CONFIG.afternoonEnd) || '17:00'}"/>
-        </div>
-      </div>
-      <div class="muted" style="font-size:11px;margin-top:4px">
-        Tasks are auto-assigned: Morning (before ${timeString12(app.CONFIG.morningEnd || {h:12,m:0})}), 
-        Afternoon (before ${timeString12(app.CONFIG.afternoonEnd || {h:17,m:0})}), 
-        Evening (after)
-      </div>
+  <h2 style="margin:0 0 12px 0">Family Time Periods</h2>
+  <div class="form-row">
+    <div class="field">
+      <label for="morningStartInput">Morning Start</label>
+      <input id="morningStartInput" type="time" value="${timeVal(app.CONFIG.morningStart) || '06:00'}"/>
     </div>
+    <div class="field">
+      <label for="morningEndInput">Morning End (Afternoon Start)</label>
+      <input id="morningEndInput" type="time" value="${timeVal(app.CONFIG.morningEnd) || '12:00'}"/>
+    </div>
+  </div>
+  <div class="form-row">
+    <div class="field">
+      <label for="eveningStartInput">Evening Start</label>
+      <input id="eveningStartInput" type="time" value="${timeVal(app.CONFIG.eveningStart) || '17:00'}"/>
+    </div>
+    <div class="field">
+      <label for="bedtimeStartInput">Bedtime Start</label>
+      <input id="bedtimeStartInput" type="time" value="${timeVal(app.CONFIG.bedtimeStart) || '21:00'}"/>
+    </div>
+  </div>
+  <div class="muted" style="font-size:11px;margin-top:4px">
+    Tasks are auto-assigned by time: Morning (${timeString12(app.CONFIG.morningStart || {h:6,m:0})} - ${timeString12(app.CONFIG.morningEnd || {h:12,m:0})}), 
+    Afternoon (${timeString12(app.CONFIG.morningEnd || {h:12,m:0})} - ${timeString12(app.CONFIG.eveningStart || {h:17,m:0})}), 
+    Evening (${timeString12(app.CONFIG.eveningStart || {h:17,m:0})} - ${timeString12(app.CONFIG.bedtimeStart || {h:21,m:0})}),
+    Bedtime (${timeString12(app.CONFIG.bedtimeStart || {h:21,m:0})} - ${timeString12(app.CONFIG.morningStart || {h:6,m:0})})
+  </div>
+</div>
     
     <div class="form-card">
       <h2 style="margin:0 0 12px 0">Family Members</h2>
@@ -2491,18 +2502,27 @@ function renderEditor() {
         </div>
         
         <div class="custom-times ${p.useDefaultTimes !== false ? 'hidden' : ''}" data-field="customTimesSection">
-          <div class="form-row">
-            <div class="field">
-              <label>Wake Time</label>
-              <input type="time" value="${timeVal(p.wakeTime) || '06:00'}" data-field="wakeTime"/>
-            </div>
-            <div class="field">
-              <label>Bedtime</label>
-              <input type="time" value="${timeVal(p.bedTime) || '21:00'}" data-field="bedTime"/>
-            </div>
-          </div>
-        </div>
-      </div>
+  <div class="form-row">
+    <div class="field">
+      <label>Morning Start</label>
+      <input type="time" value="${timeVal(p.morningStart) || '06:00'}" data-field="morningStart"/>
+    </div>
+    <div class="field">
+      <label>Morning End</label>
+      <input type="time" value="${timeVal(p.morningEnd) || '12:00'}" data-field="morningEnd"/>
+    </div>
+  </div>
+  <div class="form-row">
+    <div class="field">
+      <label>Evening Start</label>
+      <input type="time" value="${timeVal(p.eveningStart) || '17:00'}" data-field="eveningStart"/>
+    </div>
+    <div class="field">
+      <label>Bedtime Start</label>
+      <input type="time" value="${timeVal(p.bedtimeStart) || '21:00'}" data-field="bedtimeStart"/>
+    </div>
+  </div>
+</div>
       
       <div class="settings-section">
         <h3 style="margin:0 0 12px 0;font-size:14px">Activities</h3>
@@ -2619,18 +2639,20 @@ function renderEditor() {
   document.getElementById('cancelEdit').onclick = renderSummary;
   document.getElementById('saveEdit').onclick = saveEditor;
   document.getElementById('addMemberBtn').onclick = () => {
-    app.PEOPLE.push({
-      id: uid('m'), 
-      name: 'New Member',
-      useDefaultTimes: true,
-      wakeTime: {h: 6, m: 0},
-      bedTime: {h: 21, m: 0},
-      workSchoolStart: {h: 8, m: 0},
-      workSchoolEnd: {h: 15, m: 0},
-      activities: [],
-      goals: [], 
-      tasks: []
-    });
+ app.PEOPLE.push({
+  id: uid('m'), 
+  name: 'New Member',
+  useDefaultTimes: true,
+  morningStart: {h: 6, m: 0},
+  morningEnd: {h: 12, m: 0},
+  eveningStart: {h: 17, m: 0},
+  bedtimeStart: {h: 21, m: 0},
+  workSchoolStart: {h: 8, m: 0},
+  workSchoolEnd: {h: 15, m: 0},
+  activities: [],
+  goals: [], 
+  tasks: []
+});
     app.CONFIG.people = app.PEOPLE;
     saveConfig(app.CONFIG);
     renderEditor();
@@ -2994,12 +3016,12 @@ async function saveEditor() {
     return;
   }
   
-  app.CONFIG.appTitle = document.getElementById('appTitleInput').value.trim() || 'Family Checklists';
-  app.CONFIG.resetHour = Math.max(0, Math.min(23, parseInt(document.getElementById('resetHourInput').value, 10) || 21));
-  app.CONFIG.wakeParent = getTime('familyWakeInput') || {h: 6, m: 0};
-  app.CONFIG.bedtimeKids = getTime('familyBedInput') || {h: 21, m: 0};
-  app.CONFIG.morningEnd = getTime('morningEndInput') || {h: 12, m: 0};
-  app.CONFIG.afternoonEnd = getTime('afternoonEndInput') || {h: 17, m: 0};
+app.CONFIG.appTitle = document.getElementById('appTitleInput').value.trim() || 'Family Checklists';
+app.CONFIG.resetHour = Math.max(0, Math.min(23, parseInt(document.getElementById('resetHourInput').value, 10) || 21));
+app.CONFIG.morningStart = getTime('morningStartInput') || {h: 6, m: 0};
+app.CONFIG.morningEnd = getTime('morningEndInput') || {h: 12, m: 0};
+app.CONFIG.eveningStart = getTime('eveningStartInput') || {h: 17, m: 0};
+app.CONFIG.bedtimeStart = getTime('bedtimeStartInput') || {h: 21, m: 0};
   
   const pinToggle = document.getElementById('pinToggle');
   app.CONFIG.pinEnabled = pinToggle.classList.contains('active');
@@ -3037,17 +3059,25 @@ async function saveEditor() {
     const useDefaultToggle = card.querySelector('[data-toggle="useDefaultTimes"]');
     const useDefaultTimes = useDefaultToggle.classList.contains('active');
     
-    let wakeTime, bedTime;
-    if (useDefaultTimes) {
-      wakeTime = app.CONFIG.wakeParent;
-      bedTime = app.CONFIG.bedtimeKids;
-    } else {
-      const wakeTimeVal = card.querySelector('input[data-field="wakeTime"]').value;
-      wakeTime = wakeTimeVal ? {h: parseInt(wakeTimeVal.split(':')[0], 10), m: parseInt(wakeTimeVal.split(':')[1], 10)} : {h: 6, m: 0};
-      
-      const bedTimeVal = card.querySelector('input[data-field="bedTime"]').value;
-      bedTime = bedTimeVal ? {h: parseInt(bedTimeVal.split(':')[0], 10), m: parseInt(bedTimeVal.split(':')[1], 10)} : {h: 21, m: 0};
-    }
+   let morningStart, morningEnd, eveningStart, bedtimeStart;
+if (useDefaultTimes) {
+  morningStart = app.CONFIG.morningStart;
+  morningEnd = app.CONFIG.morningEnd;
+  eveningStart = app.CONFIG.eveningStart;
+  bedtimeStart = app.CONFIG.bedtimeStart;
+} else {
+  const morningStartVal = card.querySelector('input[data-field="morningStart"]').value;
+  morningStart = morningStartVal ? {h: parseInt(morningStartVal.split(':')[0], 10), m: parseInt(morningStartVal.split(':')[1], 10)} : {h: 6, m: 0};
+  
+  const morningEndVal = card.querySelector('input[data-field="morningEnd"]').value;
+  morningEnd = morningEndVal ? {h: parseInt(morningEndVal.split(':')[0], 10), m: parseInt(morningEndVal.split(':')[1], 10)} : {h: 12, m: 0};
+  
+  const eveningStartVal = card.querySelector('input[data-field="eveningStart"]').value;
+  eveningStart = eveningStartVal ? {h: parseInt(eveningStartVal.split(':')[0], 10), m: parseInt(eveningStartVal.split(':')[1], 10)} : {h: 17, m: 0};
+  
+  const bedtimeStartVal = card.querySelector('input[data-field="bedtimeStart"]').value;
+  bedtimeStart = bedtimeStartVal ? {h: parseInt(bedtimeStartVal.split(':')[0], 10), m: parseInt(bedtimeStartVal.split(':')[1], 10)} : {h: 21, m: 0};
+}
     
     const existingPerson = app.PEOPLE.find(px => px.id === id);
     const workSchoolStart = existingPerson?.workSchoolStart || {h: 8, m: 0};
@@ -3181,7 +3211,7 @@ card.querySelectorAll('.task-row').forEach(tr => {
       return 0;
     });
     
-    newPeople.push({id, name, useDefaultTimes, wakeTime, bedTime, workSchoolStart, workSchoolEnd, petName, petEmoji, activities, goals, tasks});
+    newPeople.push({id, name, useDefaultTimes, morningStart, morningEnd, eveningStart, bedtimeStart, workSchoolStart, workSchoolEnd, petName, petEmoji, activities, goals, tasks});
   });
   
   app.CONFIG.people = newPeople;
@@ -3230,19 +3260,25 @@ function updateClockAndCountdown() {
     app.PEOPLE = [];
   }
   
-  let earliestBedtime = null;
-  app.PEOPLE.forEach(p => {
-    if (p.bedTime) {
-      const bedMins = minutesOf(p.bedTime);
-      if (!earliestBedtime || bedMins < minutesOf(earliestBedtime)) {
-        earliestBedtime = p.bedTime;
-      }
-    }
-  });
+  // Determine bedtime - use individual person's bedtime or family default
+let earliestBedtime = null;
+app.PEOPLE.forEach(p => {
+  let personBedtime;
+  if (p.useDefaultTimes !== false) {
+    personBedtime = app.CONFIG.bedtimeStart || {h: 21, m: 0};
+  } else {
+    personBedtime = p.bedtimeStart || {h: 21, m: 0};
+  }
   
-  if (earliestBedtime) {
-    const bedtime = new Date(now);
-    bedtime.setHours(earliestBedtime.h, earliestBedtime.m, 0, 0);
+  const bedMins = minutesOf(personBedtime);
+  if (!earliestBedtime || bedMins < minutesOf(earliestBedtime)) {
+    earliestBedtime = personBedtime;
+  }
+});
+
+if (earliestBedtime) {
+  const bedtime = new Date(now);
+  bedtime.setHours(earliestBedtime.h, earliestBedtime.m, 0, 0);
     const diff = bedtime - now;
     
     if (diff > 0) {
