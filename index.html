@@ -3688,9 +3688,8 @@ const app = {
       setInterval(saveHistoricalSnapshot, 24 * 60 * 60 * 1000);
     }, msUntilMidnight);
     
-app.dom.appTitleEl.textContent = app.CONFIG.appTitle;
-    app.dom.subtitle.textContent = new Date().toLocaleDateString([], {weekday: 'long', month: 'long', day: 'numeric'});
-    document.getElementById('appVersion').textContent = APP_VERSION;
+app.dom.subtitle.textContent = new Date().toLocaleDateString([], {weekday: 'long', month: 'long', day: 'numeric'});
+document.getElementById('appVersion').textContent = APP_VERSION;
     
     renderSummary();
     updateClockAndCountdown();
