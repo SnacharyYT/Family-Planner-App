@@ -3688,8 +3688,19 @@ const app = {
       setInterval(saveHistoricalSnapshot, 24 * 60 * 60 * 1000);
     }, msUntilMidnight);
     
+// Update title without destroying the version span
+const titleEl = app.dom.appTitleEl;
+const versionSpan = document.getElementById('appVersion');
+const currentTitle = app.CONFIG.appTitle || 'Family Checklists';
+
+// Clear and rebuild title with version
+titleEl.textContent = currentTitle;
+if (versionSpan) {
+  titleEl.appendChild(versionSpan);
+  versionSpan.textContent = APP_VERSION;
+}
+
 app.dom.subtitle.textContent = new Date().toLocaleDateString([], {weekday: 'long', month: 'long', day: 'numeric'});
-document.getElementById('appVersion').textContent = APP_VERSION;
     
     renderSummary();
     updateClockAndCountdown();
